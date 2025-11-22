@@ -44,7 +44,7 @@ def validate_url(url):
 # ==========================================
 with st.sidebar:
     st.header("⚙️ Roster Config")
-    st.success("✅ AI Connected")
+    st.success("✅ AI Connected (Gemini 2.5)")
     
     with st.form("add_char_form", clear_on_submit=True):
         new_url = st.text_input("D&D Beyond URL")
@@ -185,21 +185,14 @@ if st.button("🎲 Roll & Generate Response", type="primary", use_container_widt
         try:
             genai.configure(api_key=GOOGLE_API_KEY)
             
-            # USE THE STABLE FLASH MODEL
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            response = model.generate_content(prompt)
+            # --- UPDATED MODEL CALL ---
+            # Using 'gemini-2.5-flash' based on your available models list
+            model = genai.GenerativeModel('gemini-2.5-flash')
             
+            response = model.generate_content(prompt)
             st.markdown("### 📜 The Narrative")
             st.write(response.text)
             
         except Exception as e:
             st.error(f"AI Error: {e}")
-            
-            # DEBUGGING ASSISTANT
-            # If 1.5-flash fails, this will list what models YOU actually have access to.
-            try:
-                st.warning("⚠️ Troubleshooting: Listing available models for your key...")
-                available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                st.code(available_models)
-            except Exception as e2:
                 st.error(f"Could not list models: {e2}")

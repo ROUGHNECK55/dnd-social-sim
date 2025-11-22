@@ -9,11 +9,10 @@ from dnd_loader import DndCharacter
 # ==========================================
 st.set_page_config(page_title="D&D Social Sim", layout="wide", page_icon="🎲")
 
-# Limits
 MAX_CHARS = 10 
 URL_PATTERN = r"dndbeyond\.com/characters/\d+"
 
-# --- LOAD SECRETS (STRICT MODE) ---
+# --- LOAD SECRETS ---
 if "GEMINI_API_KEY" in st.secrets:
     GOOGLE_API_KEY = st.secrets["GEMINI_API_KEY"]
 else:
@@ -32,11 +31,9 @@ if 'roster' not in st.session_state:
 # ==========================================
 @st.cache_data(ttl=3600)
 def fetch_character(url):
-    """Fetches data. Cache keeps it fast if you re-add the same URL."""
     return DndCharacter(url)
 
 def validate_url(url):
-    """Checks if the URL looks real and if we have space."""
     if not url: return False, "URL is required."
     if not re.search(URL_PATTERN, url): return False, "Invalid URL format."
     if len(st.session_state['roster']) >= MAX_CHARS: return False, "Roster Full (Max 10)."
@@ -49,39 +46,28 @@ with st.sidebar:
     st.header("⚙️ Roster Config")
     st.success("✅ AI Connected")
     
-    # INPUT FORM
     with st.form("add_char_form", clear_on_submit=True):
         new_url = st.text_input("D&D Beyond URL")
-        
-        # INSTRUCTION NOTE
-        st.info("⚠️ **Note:** Character Privacy must be set to **Public** on D&D Beyond (Home > Preferences) for this to work.")
-        
+        st.info("⚠️ Character Privacy must be **Public** on D&D Beyond.")
         submitted = st.form_submit_button("➕ Add Character")
         
         if submitted:
-            # 1. Validate URL format and Space
             is_valid, msg = validate_url(new_url)
-            
             if is_valid:
                 try:
                     with st.spinner("Fetching data..."):
-                        # 2. Fetch the object to get the Name
                         char_obj = fetch_character(new_url)
-                        
-                        # 3. Check if this Name is already in the roster
                         if char_obj.name in st.session_state['roster']:
                             st.error(f"'{char_obj.name}' is already in the roster.")
                         else:
                             st.session_state['roster'][char_obj.name] = char_obj
                             st.success(f"Added **{char_obj.name}**!")
                             st.rerun()
-                            
                 except Exception as e:
-                    st.error(f"Load Failed. Check if URL is Public.\nError: {e}")
+                    st.error(f"Load Failed. Check privacy settings.\nError: {e}")
             else:
                 st.error(msg)
 
-    # ROSTER DISPLAY
     if st.session_state['roster']:
         st.divider()
         st.write(f"**Party ({len(st.session_state['roster'])})**")
@@ -104,7 +90,6 @@ if len(st.session_state['roster']) < 2:
     st.info("👈 Please add at least **2 Characters** in the sidebar.")
     st.stop()
 
-# --- SELECTION ---
 col1, col2 = st.columns(2)
 with col1:
     speaker_name = st.selectbox("🗣️ Speaker", options=st.session_state['roster'].keys())
@@ -114,65 +99,22 @@ with col2:
 
 st.divider()
 
-# --- INPUTS ---
 dialogue = st.text_area("Dialogue", height=100, placeholder=f"What does {speaker_name} say?")
 likelihood = st.select_slider("Context / Difficulty", 
     options=["Impossible", "Very Unlikely", "Unlikely", "Neutral", "Likely", "Very Likely", "Guaranteed"],
     value="Neutral")
 
 # ==========================================
-# 6. EFFECTS MATRIX
+# 6. EFFECTS & EXECUTION
 # ==========================================
 EFFECTS_MATRIX = [
-    {
-        "min": -100, "max": -7, 
-        "intimidation": "{l} is deeply offended by {s}'s aggression and immediately becomes hostile or mocks the attempt.",
-        "performance": "{l} finds {s} utterly obnoxious and actively tries to leave the conversation.",
-        "deception": "{l} sees right through {s}, convinced they are lying maliciously.",
-        "persuasion": "{l} completely misinterprets {s}'s logic, taking the suggestion as an insult."
-    },
-    {
-        "min": -6, "max": -5, 
-        "intimidation": "{l} feels disrespected by {s} and digs their heels in, refusing to cooperate.",
-        "performance": "{l} is unimpressed and dismissive of {s}'s antics.",
-        "deception": "{l} distrusts {s} and is suspicious of their motives.",
-        "persuasion": "{l} simply doesn't understand {s}'s point and gets frustrated."
-    },
-    {
-        "min": -4, "max": -2, 
-        "intimidation": "{l} feels {s} is posturing but isn't truly afraid, leading to an awkward standoff.",
-        "performance": "{l} avoids making eye contact, finding {s}'s behavior slightly cringe-worthy.",
-        "deception": "{l} senses {s} is withholding information and becomes guarded.",
-        "persuasion": "{l} is confused by the details and remains unconvinced by {s}."
-    },
-    {
-        "min": -1, "max": 0, 
-        "intimidation": "{l} sees {s} as an equal; they are not scared, but they are listening.",
-        "performance": "{l} is indifferent to {s}, neither entertained nor annoyed.",
-        "deception": "{l} is neutral, neither believing nor disbelieving {s} fully.",
-        "persuasion": "{l} understands the surface level of {s}'s request but needs more convincing."
-    },
-    {
-        "min": 1, "max": 2, 
-        "intimidation": "{l} respects {s}'s strength and feels compelled to listen.",
-        "performance": "{l} is drawn in by {s}'s charisma and pays close attention.",
-        "deception": "{s}'s story seems plausible enough to {l}.",
-        "persuasion": "{l} feels enlightened by {s}'s argument and is inclined to agree."
-    },
-    {
-        "min": 3, "max": 5, 
-        "intimidation": "{l} is thoroughly cowed by {s} and feels a strong urge to submit to the demand.",
-        "performance": "{l} is captivated, actively seeking {s}'s approval or company.",
-        "deception": "{l} trusts {s} implicitly, swallowing the lie whole.",
-        "persuasion": "{l} fully understands and empathizes with {s}'s intent."
-    },
-    {
-        "min": 6, "max": 100, 
-        "intimidation": "{l} is terrified or awestruck, viewing {s} as a dominant force of nature.",
-        "performance": "{l} becomes an instant fan, hanging on {s}'s every word.",
-        "deception": "{l} believes {s} completely, perhaps even defending the lie to others.",
-        "persuasion": "{l} experiences a shift in perspective, expanding their understanding to align with {s}."
-    },
+    {"min": -100, "max": -7, "intimidation": "{l} is deeply offended by {s}'s aggression and immediately becomes hostile or mocks the attempt.", "performance": "{l} finds {s} utterly obnoxious and actively tries to leave the conversation.", "deception": "{l} sees right through {s}, convinced they are lying maliciously.", "persuasion": "{l} completely misinterprets {s}'s logic, taking the suggestion as an insult."},
+    {"min": -6, "max": -5, "intimidation": "{l} feels disrespected by {s} and digs their heels in, refusing to cooperate.", "performance": "{l} is unimpressed and dismissive of {s}'s antics.", "deception": "{l} distrusts {s} and is suspicious of their motives.", "persuasion": "{l} simply doesn't understand {s}'s point and gets frustrated."},
+    {"min": -4, "max": -2, "intimidation": "{l} feels {s} is posturing but isn't truly afraid, leading to an awkward standoff.", "performance": "{l} avoids making eye contact, finding {s}'s behavior slightly cringe-worthy.", "deception": "{l} senses {s} is withholding information and becomes guarded.", "persuasion": "{l} is confused by the details and remains unconvinced by {s}."},
+    {"min": -1, "max": 0, "intimidation": "{l} sees {s} as an equal; they are not scared, but they are listening.", "performance": "{l} is indifferent to {s}, neither entertained nor annoyed.", "deception": "{l} is neutral, neither believing nor disbelieving {s} fully.", "persuasion": "{l} understands the surface level of {s}'s request but needs more convincing."},
+    {"min": 1, "max": 2, "intimidation": "{l} respects {s}'s strength and feels compelled to listen.", "performance": "{l} is drawn in by {s}'s charisma and pays close attention.", "deception": "{s}'s story seems plausible enough to {l}.", "persuasion": "{l} feels enlightened by {s}'s argument and is inclined to agree."},
+    {"min": 3, "max": 5, "intimidation": "{l} is thoroughly cowed by {s} and feels a strong urge to submit to the demand.", "performance": "{l} is captivated, actively seeking {s}'s approval or company.", "deception": "{l} trusts {s} implicitly, swallowing the lie whole.", "persuasion": "{l} fully understands and empathizes with {s}'s intent."},
+    {"min": 6, "max": 100, "intimidation": "{l} is terrified or awestruck, viewing {s} as a dominant force of nature.", "performance": "{l} becomes an instant fan, hanging on {s}'s every word.", "deception": "{l} believes {s} completely, perhaps even defending the lie to others.", "persuasion": "{l} experiences a shift in perspective, expanding their understanding to align with {s}."},
 ]
 
 def get_outcome_text(score, skill_type, s_name, l_name):
@@ -181,9 +123,6 @@ def get_outcome_text(score, skill_type, s_name, l_name):
             return row[skill_type].format(s=s_name, l=l_name)
     return "Result unclear."
 
-# ==========================================
-# 7. EXECUTION
-# ==========================================
 if st.button("🎲 Roll & Generate Response", type="primary", use_container_width=True):
     if not dialogue:
         st.error("Please enter dialogue.")
@@ -203,7 +142,6 @@ if st.button("🎲 Roll & Generate Response", type="primary", use_container_widt
         'persuasion': (speaker.skills['Persuasion'].total + rolls['pers']) + l_insight_total 
     }
     
-    # --- TEXT LOOKUP ---
     outcomes = {
         'int': get_outcome_text(scores['intimidation'], 'intimidation', speaker.name, listener.name),
         'perf': get_outcome_text(scores['performance'], 'performance', speaker.name, listener.name),
@@ -246,16 +184,22 @@ if st.button("🎲 Roll & Generate Response", type="primary", use_container_widt
     with st.spinner("Consulting the Oracle..."):
         try:
             genai.configure(api_key=GOOGLE_API_KEY)
-            # Attempt to use Flash, fallback to Pro
-            try:
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                response = model.generate_content(prompt)
-            except Exception:
-                model = genai.GenerativeModel('gemini-pro')
-                response = model.generate_content(prompt)
+            
+            # USE THE STABLE FLASH MODEL
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(prompt)
             
             st.markdown("### 📜 The Narrative")
             st.write(response.text)
             
         except Exception as e:
             st.error(f"AI Error: {e}")
+            
+            # DEBUGGING ASSISTANT
+            # If 1.5-flash fails, this will list what models YOU actually have access to.
+            try:
+                st.warning("⚠️ Troubleshooting: Listing available models for your key...")
+                available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                st.code(available_models)
+            except Exception as e2:
+                st.error(f"Could not list models: {e2}")

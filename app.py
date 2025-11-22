@@ -9,21 +9,16 @@ from dnd_loader import DndCharacter
 # ==========================================
 st.set_page_config(page_title="D&D Social Sim", layout="wide", page_icon="🎲")
 
+# Limits
 MAX_CHARS = 10 
 URL_PATTERN = r"dndbeyond\.com/characters/\d+"
 
 # --- LOAD SECRETS (STRICT MODE) ---
-# We try to get the key. If missing, we STOP. We do not ask the user.
 if "GEMINI_API_KEY" in st.secrets:
     GOOGLE_API_KEY = st.secrets["GEMINI_API_KEY"]
 else:
     st.error("❌ **Missing API Key**")
-    st.markdown("""
-    **To the App Owner:**
-    1. Go to your Streamlit App Dashboard.
-    2. Click **Settings** -> **Secrets**.
-    3. Add this line: `GEMINI_API_KEY = "AIzaSy..."`
-    """)
+    st.markdown("Please configure `GEMINI_API_KEY` in your Streamlit Secrets.")
     st.stop()
 
 # ==========================================
@@ -37,13 +32,14 @@ if 'roster' not in st.session_state:
 # ==========================================
 @st.cache_data(ttl=3600)
 def fetch_character(url):
+    """Fetches data. Cache keeps it fast if you re-add the same URL."""
     return DndCharacter(url)
 
-def validate_input(name, url):
-    if not name or not url: return False, "Name and URL are required."
-    if not re.search(URL_PATTERN, url): return False, "Invalid URL."
-    if name in st.session_state['roster']: return False, "Name taken."
-    if len(st.session_state['roster']) >= MAX_CHARS: return False, "Roster Full."
+def validate_url(url):
+    """Checks if the URL looks real and if we have space."""
+    if not url: return False, "URL is required."
+    if not re.search(URL_PATTERN, url): return False, "Invalid URL format."
+    if len(st.session_state['roster']) >= MAX_CHARS: return False, "Roster Full (Max 10)."
     return True, ""
 
 # ==========================================
@@ -51,26 +47,41 @@ def validate_input(name, url):
 # ==========================================
 with st.sidebar:
     st.header("⚙️ Roster Config")
-    st.success("✅ AI Connected (Service Account)")
+    st.success("✅ AI Connected")
     
+    # INPUT FORM
     with st.form("add_char_form", clear_on_submit=True):
-        new_name = st.text_input("Name (e.g. Vex)")
         new_url = st.text_input("D&D Beyond URL")
+        
+        # INSTRUCTION NOTE
+        st.info("⚠️ **Note:** Character Privacy must be set to **Public** on D&D Beyond (Home > Preferences) for this to work.")
+        
         submitted = st.form_submit_button("➕ Add Character")
         
         if submitted:
-            is_valid, msg = validate_input(new_name, new_url)
+            # 1. Validate URL format and Space
+            is_valid, msg = validate_url(new_url)
+            
             if is_valid:
                 try:
-                    with st.spinner(f"Summoning {new_name}..."):
-                        st.session_state['roster'][new_name] = fetch_character(new_url)
-                        st.success(f"Added {new_name}!")
-                        st.rerun()
+                    with st.spinner("Fetching data..."):
+                        # 2. Fetch the object to get the Name
+                        char_obj = fetch_character(new_url)
+                        
+                        # 3. Check if this Name is already in the roster
+                        if char_obj.name in st.session_state['roster']:
+                            st.error(f"'{char_obj.name}' is already in the roster.")
+                        else:
+                            st.session_state['roster'][char_obj.name] = char_obj
+                            st.success(f"Added **{char_obj.name}**!")
+                            st.rerun()
+                            
                 except Exception as e:
-                    st.error(f"Load Failed: {e}")
+                    st.error(f"Load Failed. Check if URL is Public.\nError: {e}")
             else:
                 st.error(msg)
 
+    # ROSTER DISPLAY
     if st.session_state['roster']:
         st.divider()
         st.write(f"**Party ({len(st.session_state['roster'])})**")
@@ -110,7 +121,7 @@ likelihood = st.select_slider("Context / Difficulty",
     value="Neutral")
 
 # ==========================================
-# 6. EFFECTS MATRIX & GENERATION
+# 6. EFFECTS MATRIX
 # ==========================================
 EFFECTS_MATRIX = [
     {
@@ -170,6 +181,9 @@ def get_outcome_text(score, skill_type, s_name, l_name):
             return row[skill_type].format(s=s_name, l=l_name)
     return "Result unclear."
 
+# ==========================================
+# 7. EXECUTION
+# ==========================================
 if st.button("🎲 Roll & Generate Response", type="primary", use_container_width=True):
     if not dialogue:
         st.error("Please enter dialogue.")
@@ -189,6 +203,7 @@ if st.button("🎲 Roll & Generate Response", type="primary", use_container_widt
         'persuasion': (speaker.skills['Persuasion'].total + rolls['pers']) + l_insight_total 
     }
     
+    # --- TEXT LOOKUP ---
     outcomes = {
         'int': get_outcome_text(scores['intimidation'], 'intimidation', speaker.name, listener.name),
         'perf': get_outcome_text(scores['performance'], 'performance', speaker.name, listener.name),
@@ -231,13 +246,11 @@ if st.button("🎲 Roll & Generate Response", type="primary", use_container_widt
     with st.spinner("Consulting the Oracle..."):
         try:
             genai.configure(api_key=GOOGLE_API_KEY)
-            
-            # TRY FLASH FIRST, FALLBACK TO PRO IF 404
+            # Attempt to use Flash, fallback to Pro
             try:
                 model = genai.GenerativeModel('gemini-1.5-flash')
                 response = model.generate_content(prompt)
             except Exception:
-                # Fallback for older keys/regions
                 model = genai.GenerativeModel('gemini-pro')
                 response = model.generate_content(prompt)
             

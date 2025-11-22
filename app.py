@@ -100,9 +100,20 @@ with col2:
 st.divider()
 
 dialogue = st.text_area("Dialogue", height=100, placeholder=f"What does {speaker_name} say?")
-likelihood = st.select_slider("Context / Difficulty", 
-    options=["Impossible", "Very Unlikely", "Unlikely", "Neutral", "Likely", "Very Likely", "Guaranteed"],
-    value="Neutral")
+
+# === UPDATED SLIDER FOR DETERMINISTIC OUTCOME ===
+outcome_setting = st.select_slider(
+    "Deterministic Outcome (DM Fiat)", 
+    options=[
+        "Complete Rejection", 
+        "Mostly Rejected", 
+        "Neither Reject nor Accept", 
+        "Mostly Accepted", 
+        "Completely Accepted"
+    ],
+    value="Neither Reject nor Accept",
+    help="You decide the result. The dice will decide the emotional flavor."
+)
 
 # ==========================================
 # 6. EFFECTS & EXECUTION
@@ -150,45 +161,49 @@ if st.button("🎲 Roll & Generate Response", type="primary", use_container_widt
     }
 
     # --- DISPLAY METRICS ---
-    st.write("### 🎲 Mechanical Results")
+    st.write("### 🎲 Dice Results (Flavor)")
+    st.info(f"**Target Outcome:** {outcome_setting}")
+    
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Intimidation", scores['intimidation'], help=outcomes['int'])
     c2.metric("Performance", scores['performance'], help=outcomes['perf'])
     c3.metric("Deception", scores['deception'], help=outcomes['dec'])
     c4.metric("Persuasion", scores['persuasion'], help=outcomes['pers'])
 
-    # --- AI PROMPT ---
+    # --- AI PROMPT (REWRITTEN FOR DETERMINISTIC OUTCOME) ---
     prompt = f"""
     Act as a fantasy author / Dungeon Master.
     
     **SCENE:**
     *   **Speaker:** {speaker.name} (Traits: {speaker.traits}, Ideals: {speaker.ideals}, Flaws: {speaker.flaws})
     *   **Listener:** {listener.name} (Traits: {listener.traits}, Ideals: {listener.ideals}, Flaws: {listener.flaws})
-    *   **Context:** The listener is "{likelihood}" to agree.
     *   **Dialogue:** "{dialogue}"
 
-    **MECHANICS:**
-    I have simulated the social dice rolls. Analyze the tone of the dialogue to decide which ONE skill applies, then use the description below to write the response.
+    **DIRECTIVE (MANDATORY OUTCOME):**
+    The interaction MUST end with: **{outcome_setting}**.
+
+    **MECHANICS (EMOTIONAL FLAVOR):**
+    I have simulated the dice rolls. Analyze the tone of the dialogue to pick the ONE skill used, then use its specific description below to "color" the outcome.
+    (Example: If the Outcome is 'Rejection' but the Mechanics say 'Awestruck', the listener might be terrified but still forced to say no).
     
-    1. IF Intimidation (Score {scores['intimidation']}): "{outcomes['int']}"
-    2. IF Performance (Score {scores['performance']}): "{outcomes['perf']}"
-    3. IF Deception (Score {scores['deception']}): "{outcomes['dec']}"
-    4. IF Persuasion (Score {scores['persuasion']}): "{outcomes['pers']}"
+    1. IF Intimidation (Flavor): "{outcomes['int']}"
+    2. IF Performance (Flavor): "{outcomes['perf']}"
+    3. IF Deception (Flavor): "{outcomes['dec']}"
+    4. IF Persuasion (Flavor): "{outcomes['pers']}"
 
     **TASK:**
     Write {listener.name}'s response. 
-    - Describe their internal thought process.
-    - Give their spoken or physical reaction based strictly on the mechanics.
+    1. **Enforce the Mandatory Outcome** ({outcome_setting}).
+    2. Use the **Mechanical Flavor** to describe the listener's emotional state while delivering that outcome.
+    3. Describe their internal thoughts and physical reaction.
     """
 
     with st.spinner("Consulting the Oracle..."):
         try:
             genai.configure(api_key=GOOGLE_API_KEY)
-            
-            # USING THE CONFIRMED WORKING MODEL
             model = genai.GenerativeModel('gemini-2.5-flash')
-            
             response = model.generate_content(prompt)
+            
             st.markdown("### 📜 The Narrative")
             st.write(response.text)
             

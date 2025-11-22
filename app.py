@@ -101,7 +101,6 @@ st.divider()
 
 dialogue = st.text_area("Dialogue", height=100, placeholder=f"What does {speaker_name} say?")
 
-# === UPDATED SLIDER FOR DETERMINISTIC OUTCOME ===
 outcome_setting = st.select_slider(
     "Deterministic Outcome (DM Fiat)", 
     options=[
@@ -116,24 +115,54 @@ outcome_setting = st.select_slider(
 )
 
 # ==========================================
-# 6. EFFECTS & EXECUTION
+# 6. EFFECTS & LOOKUP LOGIC
 # ==========================================
+# Index 0: Worst result -> Index 6: Best result
 EFFECTS_MATRIX = [
-    {"min": -100, "max": -7, "intimidation": "{l} is deeply offended by {s}'s aggression and immediately becomes hostile or mocks the attempt.", "performance": "{l} finds {s} utterly obnoxious and actively tries to leave the conversation.", "deception": "{l} sees right through {s}, convinced they are lying maliciously.", "persuasion": "{l} completely misinterprets {s}'s logic, taking the suggestion as an insult."},
-    {"min": -6, "max": -5, "intimidation": "{l} feels disrespected by {s} and digs their heels in, refusing to cooperate.", "performance": "{l} is unimpressed and dismissive of {s}'s antics.", "deception": "{l} distrusts {s} and is suspicious of their motives.", "persuasion": "{l} simply doesn't understand {s}'s point and gets frustrated."},
-    {"min": -4, "max": -2, "intimidation": "{l} feels {s} is posturing but isn't truly afraid, leading to an awkward standoff.", "performance": "{l} avoids making eye contact, finding {s}'s behavior slightly cringe-worthy.", "deception": "{l} senses {s} is withholding information and becomes guarded.", "persuasion": "{l} is confused by the details and remains unconvinced by {s}."},
-    {"min": -1, "max": 0, "intimidation": "{l} sees {s} as an equal; they are not scared, but they are listening.", "performance": "{l} is indifferent to {s}, neither entertained nor annoyed.", "deception": "{l} is neutral, neither believing nor disbelieving {s} fully.", "persuasion": "{l} understands the surface level of {s}'s request but needs more convincing."},
-    {"min": 1, "max": 2, "intimidation": "{l} respects {s}'s strength and feels compelled to listen.", "performance": "{l} is drawn in by {s}'s charisma and pays close attention.", "deception": "{s}'s story seems plausible enough to {l}.", "persuasion": "{l} feels enlightened by {s}'s argument and is inclined to agree."},
-    {"min": 3, "max": 5, "intimidation": "{l} is thoroughly cowed by {s} and feels a strong urge to submit to the demand.", "performance": "{l} is captivated, actively seeking {s}'s approval or company.", "deception": "{l} trusts {s} implicitly, swallowing the lie whole.", "persuasion": "{l} fully understands and empathizes with {s}'s intent."},
-    {"min": 6, "max": 100, "intimidation": "{l} is terrified or awestruck, viewing {s} as a dominant force of nature.", "performance": "{l} becomes an instant fan, hanging on {s}'s every word.", "deception": "{l} believes {s} completely, perhaps even defending the lie to others.", "persuasion": "{l} experiences a shift in perspective, expanding their understanding to align with {s}."},
+    {"intimidation": "{l} is deeply offended by {s}'s aggression and immediately becomes hostile or mocks the attempt.", "performance": "{l} finds {s} utterly obnoxious and actively tries to leave the conversation.", "deception": "{l} sees right through {s}, convinced they are lying maliciously.", "persuasion": "{l} completely misinterprets {s}'s logic, taking the suggestion as an insult."},
+    {"intimidation": "{l} feels disrespected by {s} and digs their heels in, refusing to cooperate.", "performance": "{l} is unimpressed and dismissive of {s}'s antics.", "deception": "{l} distrusts {s} and is suspicious of their motives.", "persuasion": "{l} simply doesn't understand {s}'s point and gets frustrated."},
+    {"intimidation": "{l} feels {s} is posturing but isn't truly afraid, leading to an awkward standoff.", "performance": "{l} avoids making eye contact, finding {s}'s behavior slightly cringe-worthy.", "deception": "{l} senses {s} is withholding information and becomes guarded.", "persuasion": "{l} is confused by the details and remains unconvinced by {s}."},
+    {"intimidation": "{l} sees {s} as an equal; they are not scared, but they are listening.", "performance": "{l} is indifferent to {s}, neither entertained nor annoyed.", "deception": "{l} is neutral, neither believing nor disbelieving {s} fully.", "persuasion": "{l} understands the surface level of {s}'s request but needs more convincing."},
+    {"intimidation": "{l} respects {s}'s strength and feels compelled to listen.", "performance": "{l} is drawn in by {s}'s charisma and pays close attention.", "deception": "{s}'s story seems plausible enough to {l}.", "persuasion": "{l} feels enlightened by {s}'s argument and is inclined to agree."},
+    {"intimidation": "{l} is thoroughly cowed by {s} and feels a strong urge to submit to the demand.", "performance": "{l} is captivated, actively seeking {s}'s approval or company.", "deception": "{l} trusts {s} implicitly, swallowing the lie whole.", "persuasion": "{l} fully understands and empathizes with {s}'s intent."},
+    {"intimidation": "{l} is terrified or awestruck, viewing {s} as a dominant force of nature.", "performance": "{l} becomes an instant fan, hanging on {s}'s every word.", "deception": "{l} believes {s} completely, perhaps even defending the lie to others.", "persuasion": "{l} experiences a shift in perspective, expanding their understanding to align with {s}."},
 ]
 
-def get_outcome_text(score, skill_type, s_name, l_name):
-    for row in EFFECTS_MATRIX:
-        if row["min"] <= score <= row["max"]:
-            return row[skill_type].format(s=s_name, l=l_name)
-    return "Result unclear."
+# Relative Differences (Int/Perf/Dec)
+STANDARD_RANGES = [
+    (-100, -7), (-6, -5), (-4, -2), (-1, 0), (1, 2), (3, 5), (6, 100)
+]
 
+# Absolute Sums (Persuasion Only)
+PERSUASION_RANGES = [
+    (0, 9),    # Mistakenly understands opposite
+    (10, 14),  # Doesn't understand
+    (15, 19),  # Confused details
+    (20, 24),  # Understands surface
+    (25, 29),  # Enlightened
+    (30, 34),  # Understands intent
+    (35, 200)  # Expands understanding
+]
+
+def get_standard_text(score, skill_type, s_name, l_name):
+    index = 3 # Default neutral
+    for i, (min_val, max_val) in enumerate(STANDARD_RANGES):
+        if min_val <= score <= max_val:
+            index = i
+            break
+    return EFFECTS_MATRIX[index][skill_type].format(s=s_name, l=l_name)
+
+def get_persuasion_text(score, s_name, l_name):
+    index = 3 # Default neutral
+    for i, (min_val, max_val) in enumerate(PERSUASION_RANGES):
+        if min_val <= score <= max_val:
+            index = i
+            break
+    return EFFECTS_MATRIX[index]["persuasion"].format(s=s_name, l=l_name)
+
+# ==========================================
+# 7. EXECUTION
+# ==========================================
 if st.button("🎲 Roll & Generate Response", type="primary", use_container_width=True):
     if not dialogue:
         st.error("Please enter dialogue.")
@@ -146,18 +175,17 @@ if st.button("🎲 Roll & Generate Response", type="primary", use_container_widt
     rolls = {k: random.randint(1,20) for k in ['int','perf','dec','pers','insight']}
     l_insight_total = listener.skills['Insight'].total + rolls['insight']
     
-    scores = {
-        'intimidation': (speaker.skills['Intimidation'].total + rolls['int']) - l_insight_total,
-        'performance': (speaker.skills['Performance'].total + rolls['perf']) - l_insight_total,
-        'deception': (speaker.skills['Deception'].total + rolls['dec']) - l_insight_total,
-        'persuasion': (speaker.skills['Persuasion'].total + rolls['pers']) + l_insight_total 
-    }
+    score_int = (speaker.skills['Intimidation'].total + rolls['int']) - l_insight_total
+    score_perf = (speaker.skills['Performance'].total + rolls['perf']) - l_insight_total
+    score_dec = (speaker.skills['Deception'].total + rolls['dec']) - l_insight_total
+    score_pers = (speaker.skills['Persuasion'].total + rolls['pers']) + l_insight_total 
     
+    # --- TEXT LOOKUP ---
     outcomes = {
-        'int': get_outcome_text(scores['intimidation'], 'intimidation', speaker.name, listener.name),
-        'perf': get_outcome_text(scores['performance'], 'performance', speaker.name, listener.name),
-        'dec': get_outcome_text(scores['deception'], 'deception', speaker.name, listener.name),
-        'pers': get_outcome_text(scores['persuasion'], 'persuasion', speaker.name, listener.name),
+        'int': get_standard_text(score_int, 'intimidation', speaker.name, listener.name),
+        'perf': get_standard_text(score_perf, 'performance', speaker.name, listener.name),
+        'dec': get_standard_text(score_dec, 'deception', speaker.name, listener.name),
+        'pers': get_persuasion_text(score_pers, speaker.name, listener.name),
     }
 
     # --- DISPLAY METRICS ---
@@ -165,12 +193,12 @@ if st.button("🎲 Roll & Generate Response", type="primary", use_container_widt
     st.info(f"**Target Outcome:** {outcome_setting}")
     
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Intimidation", scores['intimidation'], help=outcomes['int'])
-    c2.metric("Performance", scores['performance'], help=outcomes['perf'])
-    c3.metric("Deception", scores['deception'], help=outcomes['dec'])
-    c4.metric("Persuasion", scores['persuasion'], help=outcomes['pers'])
+    c1.metric("Intimidation", score_int, help=outcomes['int'])
+    c2.metric("Performance", score_perf, help=outcomes['perf'])
+    c3.metric("Deception", score_dec, help=outcomes['dec'])
+    c4.metric("Persuasion", score_pers, help=outcomes['pers'])
 
-    # --- AI PROMPT (REWRITTEN FOR DETERMINISTIC OUTCOME) ---
+    # --- AI PROMPT ---
     prompt = f"""
     Act as a fantasy author / Dungeon Master.
     
@@ -208,4 +236,5 @@ if st.button("🎲 Roll & Generate Response", type="primary", use_container_widt
             st.write(response.text)
             
         except Exception as e:
+            st.error(f"AI Error: {e}")
             st.error(f"AI Error: {e}")

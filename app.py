@@ -184,12 +184,12 @@ if st.button("🎲 Roll & Generate Response", type="primary", use_container_widt
 
     **MECHANICS (EMOTIONAL FLAVOR):**
     I have simulated the dice rolls. Analyze the tone of the dialogue to pick the ONE skill used, then use its specific description below to "color" the outcome.
-    (Example: If the Outcome is 'Rejection' but the Mechanics say 'Awestruck', the listener might be terrified but still forced to say no).
+    (Example: If the Outcome is 'Rejection' but the Mechanics say 'Awestruck', the listener might be terrified but still forced to say no). Using the following to determine the flavor of the reaction.
     
-    1. IF Intimidation (Flavor): "{outcomes['int']}"
-    2. IF Performance (Flavor): "{outcomes['perf']}"
-    3. IF Deception (Flavor): "{outcomes['dec']}"
-    4. IF Persuasion (Flavor): "{outcomes['pers']}"
+    1. The amount of respect (Flavor): "{outcomes['int']}"
+    2. The amount of attention (Flavor): "{outcomes['perf']}"
+    3. The amount of trust (Flavor): "{outcomes['dec']}"
+    4. The amount of understanding (Flavor): "{outcomes['pers']}"
 
     **TASK:**
     Write {listener.name}'s response. 

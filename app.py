@@ -185,8 +185,7 @@ if st.button("🎲 Roll & Generate Response", type="primary", use_container_widt
         try:
             genai.configure(api_key=GOOGLE_API_KEY)
             
-            # --- UPDATED MODEL CALL ---
-            # Using 'gemini-2.5-flash' based on your available models list
+            # USING THE CONFIRMED WORKING MODEL
             model = genai.GenerativeModel('gemini-2.5-flash')
             
             response = model.generate_content(prompt)
@@ -195,4 +194,3 @@ if st.button("🎲 Roll & Generate Response", type="primary", use_container_widt
             
         except Exception as e:
             st.error(f"AI Error: {e}")
-                st.error(f"Could not list models: {e2}")

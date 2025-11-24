@@ -39,6 +39,18 @@ def validate_url(url):
     if len(st.session_state['roster']) >= MAX_CHARS: return False, "Roster Full (Max 10)."
     return True, ""
 
+def roll_d20(state):
+    """Handles Advantage/Disadvantage logic"""
+    r1 = random.randint(1, 20)
+    r2 = random.randint(1, 20)
+    
+    if state == "Advantage":
+        return max(r1, r2)
+    elif state == "Disadvantage":
+        return min(r1, r2)
+    else:
+        return r1
+
 # ==========================================
 # 4. SIDEBAR
 # ==========================================
@@ -93,9 +105,14 @@ if len(st.session_state['roster']) < 2:
 col1, col2 = st.columns(2)
 with col1:
     speaker_name = st.selectbox("🗣️ Speaker", options=st.session_state['roster'].keys())
+    # SPEAKER ADVANTAGE TOGGLE
+    s_state = st.radio(f"{speaker_name}'s State", ["Normal", "Advantage", "Disadvantage"], key="s_state", horizontal=True)
+
 with col2:
     listener_opts = [n for n in st.session_state['roster'].keys() if n != speaker_name]
     listener_name = st.selectbox("👂 Listener", options=listener_opts)
+    # LISTENER ADVANTAGE TOGGLE
+    l_state = st.radio(f"{listener_name}'s State", ["Normal", "Advantage", "Disadvantage"], key="l_state", horizontal=True)
 
 st.divider()
 
@@ -171,8 +188,19 @@ if st.button("🎲 Roll & Generate Response", type="primary", use_container_widt
     speaker = st.session_state['roster'][speaker_name]
     listener = st.session_state['roster'][listener_name]
     
-    # --- MATH ---
-    rolls = {k: random.randint(1,20) for k in ['int','perf','dec','pers','insight']}
+    # --- MATH (With Advantage/Disadvantage) ---
+    rolls = {}
+    
+    # Speaker Rolls (Int, Perf, Dec, Pers)
+    rolls['int'] = roll_d20(s_state)
+    rolls['perf'] = roll_d20(s_state)
+    rolls['dec'] = roll_d20(s_state)
+    rolls['pers'] = roll_d20(s_state)
+    
+    # Listener Roll (Insight)
+    rolls['insight'] = roll_d20(l_state)
+
+    # Calculate Totals
     l_insight_total = listener.skills['Insight'].total + rolls['insight']
     
     score_int = (speaker.skills['Intimidation'].total + rolls['int']) - l_insight_total
@@ -190,6 +218,9 @@ if st.button("🎲 Roll & Generate Response", type="primary", use_container_widt
 
     # --- DISPLAY METRICS ---
     st.write("### 🎲 Dice Results (Flavor)")
+    
+    # Display roll states for confirmation
+    st.caption(f"**{speaker_name}:** {s_state} | **{listener_name}:** {l_state}")
     st.info(f"**Target Outcome:** {outcome_setting}")
     
     c1, c2, c3, c4 = st.columns(4)

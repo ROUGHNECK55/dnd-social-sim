@@ -44,10 +44,8 @@ def roll_d20(state, use_min_10):
     Handles Advantage/Disadvantage AND Minimum 10 logic.
     If use_min_10 is True, the die rolls between 10 and 20.
     """
-    # Determine the floor of the die
     low = 10 if use_min_10 else 1
     
-    # Generate two potential rolls (in case of Adv/Dis)
     r1 = random.randint(low, 20)
     r2 = random.randint(low, 20)
     
@@ -112,16 +110,24 @@ if len(st.session_state['roster']) < 2:
 col1, col2 = st.columns(2)
 with col1:
     speaker_name = st.selectbox("🗣️ Speaker", options=st.session_state['roster'].keys())
-    # SPEAKER CONTROLS
-    s_state = st.radio(f"{speaker_name}'s Roll", ["Normal", "Advantage", "Disadvantage"], key="s_state", horizontal=True)
-    s_floor = st.radio(f"{speaker_name}'s Floor", ["Standard (1-20)", "Min 10 (10-20)"], key="s_floor", horizontal=True)
+    # Global Advantage State for Speaker
+    s_state = st.radio(f"{speaker_name} Roll", ["Normal", "Advantage", "Disadvantage"], key="s_state", horizontal=True)
+    
+    st.markdown("**Reliable Talent (Min 10):**")
+    sc1, sc2 = st.columns(2)
+    s_min_int = sc1.checkbox("Intimidation", key="min_int")
+    s_min_dec = sc1.checkbox("Deception", key="min_dec")
+    s_min_perf = sc2.checkbox("Performance", key="min_perf")
+    s_min_pers = sc2.checkbox("Persuasion", key="min_pers")
 
 with col2:
     listener_opts = [n for n in st.session_state['roster'].keys() if n != speaker_name]
     listener_name = st.selectbox("👂 Listener", options=listener_opts)
-    # LISTENER CONTROLS
-    l_state = st.radio(f"{listener_name}'s Roll", ["Normal", "Advantage", "Disadvantage"], key="l_state", horizontal=True)
-    l_floor = st.radio(f"{listener_name}'s Floor", ["Standard (1-20)", "Min 10 (10-20)"], key="l_floor", horizontal=True)
+    # Global Advantage State for Listener
+    l_state = st.radio(f"{listener_name} Roll", ["Normal", "Advantage", "Disadvantage"], key="l_state", horizontal=True)
+    
+    st.markdown("**Reliable Talent (Min 10):**")
+    l_min_insight = st.checkbox("Insight Check", key="min_insight")
 
 st.divider()
 
@@ -183,21 +189,17 @@ if st.button("🎲 Roll & Generate Response", type="primary", use_container_widt
     speaker = st.session_state['roster'][speaker_name]
     listener = st.session_state['roster'][listener_name]
     
-    # --- BOOLEANS FOR MIN 10 ---
-    s_use_min = (s_floor == "Min 10 (10-20)")
-    l_use_min = (l_floor == "Min 10 (10-20)")
-
-    # --- MATH (With Adv/Dis and Min 10) ---
+    # --- MATH (Specific Min 10 Logic) ---
     rolls = {}
     
-    # Speaker Rolls
-    rolls['int'] = roll_d20(s_state, s_use_min)
-    rolls['perf'] = roll_d20(s_state, s_use_min)
-    rolls['dec'] = roll_d20(s_state, s_use_min)
-    rolls['pers'] = roll_d20(s_state, s_use_min)
+    # Speaker Rolls (Pass specific boolean for each skill)
+    rolls['int'] = roll_d20(s_state, s_min_int)
+    rolls['perf'] = roll_d20(s_state, s_min_perf)
+    rolls['dec'] = roll_d20(s_state, s_min_dec)
+    rolls['pers'] = roll_d20(s_state, s_min_pers)
     
     # Listener Roll
-    rolls['insight'] = roll_d20(l_state, l_use_min)
+    rolls['insight'] = roll_d20(l_state, l_min_insight)
 
     # Calculate Totals
     l_insight_total = listener.skills['Insight'].total + rolls['insight']
@@ -217,12 +219,6 @@ if st.button("🎲 Roll & Generate Response", type="primary", use_container_widt
 
     # --- DISPLAY METRICS ---
     st.write("### 🎲 Dice Results (Flavor)")
-    
-    # Status Line
-    s_label = f"{s_state}" + (" + Min 10" if s_use_min else "")
-    l_label = f"{l_state}" + (" + Min 10" if l_use_min else "")
-    st.caption(f"**{speaker_name}:** {s_label} | **{listener_name}:** {l_label}")
-    st.info(f"**Target Outcome:** {outcome_setting}")
     
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Intimidation", score_int, help=outcomes['int'])

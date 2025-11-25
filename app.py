@@ -39,10 +39,17 @@ def validate_url(url):
     if len(st.session_state['roster']) >= MAX_CHARS: return False, "Roster Full (Max 10)."
     return True, ""
 
-def roll_d20(state):
-    """Handles Advantage/Disadvantage logic"""
-    r1 = random.randint(1, 20)
-    r2 = random.randint(1, 20)
+def roll_d20(state, use_min_10):
+    """
+    Handles Advantage/Disadvantage AND Minimum 10 logic.
+    If use_min_10 is True, the die rolls between 10 and 20.
+    """
+    # Determine the floor of the die
+    low = 10 if use_min_10 else 1
+    
+    # Generate two potential rolls (in case of Adv/Dis)
+    r1 = random.randint(low, 20)
+    r2 = random.randint(low, 20)
     
     if state == "Advantage":
         return max(r1, r2)
@@ -105,14 +112,16 @@ if len(st.session_state['roster']) < 2:
 col1, col2 = st.columns(2)
 with col1:
     speaker_name = st.selectbox("🗣️ Speaker", options=st.session_state['roster'].keys())
-    # SPEAKER ADVANTAGE TOGGLE
-    s_state = st.radio(f"{speaker_name}'s State", ["Normal", "Advantage", "Disadvantage"], key="s_state", horizontal=True)
+    # SPEAKER CONTROLS
+    s_state = st.radio(f"{speaker_name}'s Roll", ["Normal", "Advantage", "Disadvantage"], key="s_state", horizontal=True)
+    s_floor = st.radio(f"{speaker_name}'s Floor", ["Standard (1-20)", "Min 10 (10-20)"], key="s_floor", horizontal=True)
 
 with col2:
     listener_opts = [n for n in st.session_state['roster'].keys() if n != speaker_name]
     listener_name = st.selectbox("👂 Listener", options=listener_opts)
-    # LISTENER ADVANTAGE TOGGLE
-    l_state = st.radio(f"{listener_name}'s State", ["Normal", "Advantage", "Disadvantage"], key="l_state", horizontal=True)
+    # LISTENER CONTROLS
+    l_state = st.radio(f"{listener_name}'s Roll", ["Normal", "Advantage", "Disadvantage"], key="l_state", horizontal=True)
+    l_floor = st.radio(f"{listener_name}'s Floor", ["Standard (1-20)", "Min 10 (10-20)"], key="l_floor", horizontal=True)
 
 st.divider()
 
@@ -134,7 +143,6 @@ outcome_setting = st.select_slider(
 # ==========================================
 # 6. EFFECTS & LOOKUP LOGIC
 # ==========================================
-# Index 0: Worst result -> Index 6: Best result
 EFFECTS_MATRIX = [
     {"intimidation": "{l} is deeply offended by {s}'s aggression and immediately becomes hostile or mocks the attempt.", "performance": "{l} finds {s} utterly obnoxious and actively tries to leave the conversation.", "deception": "{l} sees right through {s}, convinced they are lying maliciously.", "persuasion": "{l} completely misinterprets {s}'s logic, taking the suggestion as an insult."},
     {"intimidation": "{l} feels disrespected by {s} and digs their heels in, refusing to cooperate.", "performance": "{l} is unimpressed and dismissive of {s}'s antics.", "deception": "{l} distrusts {s} and is suspicious of their motives.", "persuasion": "{l} simply doesn't understand {s}'s point and gets frustrated."},
@@ -145,24 +153,11 @@ EFFECTS_MATRIX = [
     {"intimidation": "{l} is terrified or awestruck, viewing {s} as a dominant force of nature.", "performance": "{l} becomes an instant fan, hanging on {s}'s every word.", "deception": "{l} believes {s} completely, perhaps even defending the lie to others.", "persuasion": "{l} experiences a shift in perspective, expanding their understanding to align with {s}."},
 ]
 
-# Relative Differences (Int/Perf/Dec)
-STANDARD_RANGES = [
-    (-100, -7), (-6, -5), (-4, -2), (-1, 0), (1, 2), (3, 5), (6, 100)
-]
-
-# Absolute Sums (Persuasion Only)
-PERSUASION_RANGES = [
-    (0, 9),    # Mistakenly understands opposite
-    (10, 14),  # Doesn't understand
-    (15, 19),  # Confused details
-    (20, 24),  # Understands surface
-    (25, 29),  # Enlightened
-    (30, 34),  # Understands intent
-    (35, 200)  # Expands understanding
-]
+STANDARD_RANGES = [(-100, -7), (-6, -5), (-4, -2), (-1, 0), (1, 2), (3, 5), (6, 100)]
+PERSUASION_RANGES = [(0, 9), (10, 14), (15, 19), (20, 24), (25, 29), (30, 34), (35, 200)]
 
 def get_standard_text(score, skill_type, s_name, l_name):
-    index = 3 # Default neutral
+    index = 3 
     for i, (min_val, max_val) in enumerate(STANDARD_RANGES):
         if min_val <= score <= max_val:
             index = i
@@ -170,7 +165,7 @@ def get_standard_text(score, skill_type, s_name, l_name):
     return EFFECTS_MATRIX[index][skill_type].format(s=s_name, l=l_name)
 
 def get_persuasion_text(score, s_name, l_name):
-    index = 3 # Default neutral
+    index = 3 
     for i, (min_val, max_val) in enumerate(PERSUASION_RANGES):
         if min_val <= score <= max_val:
             index = i
@@ -188,17 +183,21 @@ if st.button("🎲 Roll & Generate Response", type="primary", use_container_widt
     speaker = st.session_state['roster'][speaker_name]
     listener = st.session_state['roster'][listener_name]
     
-    # --- MATH (With Advantage/Disadvantage) ---
+    # --- BOOLEANS FOR MIN 10 ---
+    s_use_min = (s_floor == "Min 10 (10-20)")
+    l_use_min = (l_floor == "Min 10 (10-20)")
+
+    # --- MATH (With Adv/Dis and Min 10) ---
     rolls = {}
     
-    # Speaker Rolls (Int, Perf, Dec, Pers)
-    rolls['int'] = roll_d20(s_state)
-    rolls['perf'] = roll_d20(s_state)
-    rolls['dec'] = roll_d20(s_state)
-    rolls['pers'] = roll_d20(s_state)
+    # Speaker Rolls
+    rolls['int'] = roll_d20(s_state, s_use_min)
+    rolls['perf'] = roll_d20(s_state, s_use_min)
+    rolls['dec'] = roll_d20(s_state, s_use_min)
+    rolls['pers'] = roll_d20(s_state, s_use_min)
     
-    # Listener Roll (Insight)
-    rolls['insight'] = roll_d20(l_state)
+    # Listener Roll
+    rolls['insight'] = roll_d20(l_state, l_use_min)
 
     # Calculate Totals
     l_insight_total = listener.skills['Insight'].total + rolls['insight']
@@ -219,8 +218,10 @@ if st.button("🎲 Roll & Generate Response", type="primary", use_container_widt
     # --- DISPLAY METRICS ---
     st.write("### 🎲 Dice Results (Flavor)")
     
-    # Display roll states for confirmation
-    st.caption(f"**{speaker_name}:** {s_state} | **{listener_name}:** {l_state}")
+    # Status Line
+    s_label = f"{s_state}" + (" + Min 10" if s_use_min else "")
+    l_label = f"{l_state}" + (" + Min 10" if l_use_min else "")
+    st.caption(f"**{speaker_name}:** {s_label} | **{listener_name}:** {l_label}")
     st.info(f"**Target Outcome:** {outcome_setting}")
     
     c1, c2, c3, c4 = st.columns(4)

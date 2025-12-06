@@ -4,42 +4,36 @@ import networkx as nx
 from typing import List, Dict, Any, Optional
 
 class WorldGraph:
-    def __init__(self, storage_path: str = "data/campaign.json"):
-        self.storage_path = storage_path
+    def __init__(self):
+        # Ephemeral initialization - start blank
         self.graph = nx.DiGraph()
         self.ontology = {
             "node_types": ["Character", "Location", "Faction", "Item", "Concept", "Event"],
             "edge_types": ["Knows", "Located_In", "Member_Of", "Owner_Of", "Related_To", "Happened_At"]
         }
-        self.load()
 
-    def load(self):
-        """Loads the graph from JSON storage."""
-        if os.path.exists(self.storage_path):
-            try:
-                with open(self.storage_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    # Load ontology if present, otherwise keep defaults
-                    if "ontology" in data:
-                        self.ontology = data["ontology"]
-                    
-                    self.graph = nx.node_link_graph(data["graph"])
-                    print(f"Graph loaded: {self.graph.number_of_nodes()} nodes, {self.graph.number_of_edges()} edges.")
-            except Exception as e:
-                print(f"Error loading graph: {e}. Starting fresh.")
-                self.graph = nx.DiGraph()
-        else:
-            self.graph = nx.DiGraph()
-
-    def save(self):
-        """Saves the graph to JSON storage."""
+    def export_to_json(self) -> str:
+        """Returns the current graph state as a JSON string."""
         data = {
             "ontology": self.ontology,
             "graph": nx.node_link_data(self.graph)
         }
-        os.makedirs(os.path.dirname(self.storage_path), exist_ok=True)
-        with open(self.storage_path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2)
+        return json.dumps(data, indent=2)
+
+    def import_from_json(self, json_str: str) -> tuple[bool, str]:
+        """Replaces current state with data from JSON string."""
+        try:
+            data = json.loads(json_str)
+            if "ontology" in data:
+                self.ontology = data["ontology"]
+            
+            if "graph" in data:
+                self.graph = nx.node_link_graph(data["graph"])
+                return True, f"Successfully loaded {self.graph.number_of_nodes()} nodes and {self.graph.number_of_edges()} edges."
+            else:
+                 return False, "Invalid JSON: missing 'graph' key."
+        except Exception as e:
+            return False, f"Import Error: {e}"
 
     def update_ontology(self, node_types: List[str] = None, edge_types: List[str] = None):
         """Updates the allowed node and edge types."""
@@ -47,7 +41,6 @@ class WorldGraph:
             self.ontology["node_types"] = node_types
         if edge_types:
             self.ontology["edge_types"] = edge_types
-        self.save()
 
     def add_node(self, name: str, type: str, description: str = "", **kwargs) -> bool:
         """Adds or updates a node. Returns True if successful."""
@@ -56,14 +49,12 @@ class WorldGraph:
             return False
         
         self.graph.add_node(name, type=type, description=description, **kwargs)
-        self.save()
         return True
 
     def delete_node(self, name: str):
         """Deletes a node and its edges."""
         if self.graph.has_node(name):
             self.graph.remove_node(name)
-            self.save()
 
     def add_edge(self, source: str, target: str, type: str, weight: int = 1, **kwargs) -> bool:
         """Adds or updates an edge. Returns True if successful."""
@@ -76,7 +67,6 @@ class WorldGraph:
             return False
 
         self.graph.add_edge(source, target, type=type, weight=weight, **kwargs)
-        self.save()
         return True
 
     def get_context(self, query_entities: List[str], depth: int = 1) -> Dict[str, Any]:

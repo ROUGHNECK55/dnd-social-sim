@@ -13,7 +13,39 @@ if 'world_graph' not in st.session_state:
 wg = st.session_state.world_graph
 
 # Tabs for different DM functions
-tab_ontology, tab_nodes, tab_ingest = st.tabs(["📜 Ontology", "📦 Nodes & Relations", "📥 Ingestion"])
+tab_ontology, tab_nodes, tab_ingest, tab_persistence = st.tabs(["📜 Ontology", "📦 Nodes & Relations", "📥 Ingestion", "💾 Save/Load"])
+
+# ==========================
+# PERSISTENCE TAB
+# ==========================
+with tab_persistence:
+    st.header("💾 World Persistence")
+    st.warning("⚠️ The server does NOT auto-save. You must download your world state to save functionality.")
+    
+    col_dl, col_ul = st.columns(2)
+    
+    with col_dl:
+        st.subheader("Download World")
+        json_data = wg.export_to_json()
+        st.download_button(
+            label="⬇️ Download campaign.json",
+            data=json_data,
+            file_name="campaign.json",
+            mime="application/json"
+        )
+        
+    with col_ul:
+        st.subheader("Upload World")
+        uploaded_file = st.file_uploader("Upload campaign.json", type=["json"])
+        if uploaded_file is not None:
+            if st.button("🚨 Overwrite Current World"):
+                string_data = uploaded_file.getvalue().decode("utf-8")
+                success, msg = wg.import_from_json(string_data)
+                if success:
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.error(msg)
 
 # ==========================
 # ONTOLOGY TAB

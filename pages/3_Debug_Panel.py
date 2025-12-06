@@ -24,16 +24,9 @@ with tab_graph:
     st.metric("Total Nodes", wg.graph.number_of_nodes())
     st.metric("Total Edges", wg.graph.number_of_edges())
     
-    if os.path.exists("data/campaign.json"):
-        with open("data/campaign.json", "r", encoding="utf-8") as f:
-            data = json.load(f)
-            st.json(data)
-    else:
-        st.warning("No campaign.json file found.")
-        
-    if st.button("Force Save Graph"):
-        wg.save()
-        st.success("Graph Saved.")
+    st.markdown("### 🔍 JSON Preview")
+    st.caption("Current In-Memory State")
+    st.json(json.loads(wg.export_to_json()))
 
 with tab_logs:
     st.header("Directory Check")

@@ -56,6 +56,10 @@ with tab_history:
                         if 'scores' in debug:
                             st.subheader("Net Scores")
                             st.json(debug['scores'])
+                        
+                        if 'prompt' in debug:
+                            st.subheader("Prompt Sent to AI")
+                            st.code(debug['prompt'], language="text")
             
             # Text format
             log_text += f"[{role}]: {content}\n"

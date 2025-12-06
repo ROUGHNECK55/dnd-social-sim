@@ -154,20 +154,28 @@ if user_input:
                 final_response = resp.text
 
             # D. OUTPUT
-            debug_info = None
+            debug_info = {}
+            
+            # Common debug fields
+            debug_info['prompt'] = prompt
+            
             if action_type == "Social":
-                debug_info = {
+                debug_info.update({
                      "type": "Social",
                      "rolls": outcomes['rolls'],
                      "scores": outcomes['scores'],
                      "table": "Effects Matrix"
-                }
+                })
             elif action_type == "Oracle":
-                debug_info = {
+                debug_info.update({
                     "type": "Oracle",
                     "subtype": target_context,
                     "table": f"Oracle ({target_context})"
-                }
+                })
+            else:
+                 debug_info.update({
+                    "type": "Narrative"
+                 })
 
             st.session_state.chat_history.append({"role": "assistant", "content": final_response, "debug_info": debug_info})
             with st.chat_message("assistant"):

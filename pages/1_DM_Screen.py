@@ -163,8 +163,19 @@ with tab_ingest:
                 
                 with st.spinner("Extracting..."):
                     try:
+                        from modules.utils import parse_llm_json
+                        
                         resp = model.generate_content(prompt_extract)
-                        data = json.loads(resp.text)
+                        data, err = parse_llm_json(resp.text)
+                        
+                        if err:
+                            st.error(err)
+                            st.stop()
+                        
+                        if 'nodes' not in data:
+                             st.error("Invalid response format: 'nodes' key missing.")
+                             st.stop()
+
                         
                         st.write(f"Found {len(data.get('nodes', []))} nodes.")
                         

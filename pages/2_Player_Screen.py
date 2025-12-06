@@ -101,8 +101,16 @@ if user_input:
         try:
             genai.configure(api_key=GOOGLE_API_KEY)
             model = genai.GenerativeModel('gemini-2.5-flash', generation_config={"response_mime_type": "application/json"})
+            from modules.utils import parse_llm_json
             response = model.generate_content(prompt_planner)
-            plan = json.loads(response.text)
+            plan, err = parse_llm_json(response.text)
+            
+            if err:
+                 status.write("Error parsing plan. Retrying...")
+                 # Optional: Retry logic here, for now just fail gracefully
+                 st.error(f"Planner Error: {err}")
+                 st.stop()
+
             
             status.write(f"Plan: {plan['type']}")
             

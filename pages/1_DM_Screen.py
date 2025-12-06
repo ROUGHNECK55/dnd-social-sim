@@ -143,18 +143,28 @@ with tab_nodes:
 # ==========================
 # INGESTION TAB
 # ==========================
+# ==========================
+# INGESTION TAB
+# ==========================
 with tab_ingest:
     st.header("📥 Ingestion Engine")
     st.info("Paste text or load converted resources to auto-generate Nodes.")
 
+    # State Init
+    if 'ingest_source_text' not in st.session_state:
+        st.session_state.ingest_source_text = ""
+    if 'ingest_extracted_data' not in st.session_state:
+        st.session_state.ingest_extracted_data = None
+
     # 1. Source Selection
     ingest_source = st.radio("Source", ["Paste Text", "Load Resource File"])
     
-    source_text = ""
     if ingest_source == "Paste Text":
-        source_text = st.text_area("Content to Ingest", height=300)
+        # Synchronize text area with session state
+        val = st.text_area("Content to Ingest", value=st.session_state.ingest_source_text, height=300)
+        st.session_state.ingest_source_text = val
     else:
-        # List MD files
+        # Load File Logic
         import os
         resource_dir = os.path.join("resources", "solo_play")
         if os.path.exists(resource_dir):
@@ -162,17 +172,20 @@ with tab_ingest:
             selected_file = st.selectbox("Select File", files)
             if selected_file:
                 with open(os.path.join(resource_dir, selected_file), 'r', encoding='utf-8') as f:
-                    # Limit preview to avoid overload
                     full_text = f.read()
                     st.text_area("File Preview (First 1000 chars)", full_text[:1000], disabled=True)
                     if st.button("Load File Content"):
-                        source_text = full_text # In practice you might want to chunk this
+                        st.session_state.ingest_source_text = full_text
+                        st.success("File loaded into memory!")
+                        st.rerun()
         else:
             st.error("Resource directory not found.")
 
+    st.write(f"**Current Text Length:** {len(st.session_state.ingest_source_text)} chars")
+
     # 2. Extract Button
-    if st.button("🔮 AI Extract Nodes", type="primary", disabled=not source_text):
-        if len(source_text) > 50000:
+    if st.button("🔮 AI Extract Nodes", type="primary", disabled=not st.session_state.ingest_source_text):
+        if len(st.session_state.ingest_source_text) > 50000:
              st.warning("Text too long! Please process in chunks (< 50k characters).")
         else:
             import google.generativeai as genai
@@ -189,9 +202,8 @@ with tab_ingest:
                 Return JSON dict with key "nodes": [ {{ "name": "...", "type": "...", "description": "..." }} ]
                 
                 Text:
-                {source_text[:30000]} 
+                {st.session_state.ingest_source_text[:30000]} 
                 """
-                # Truncate to safety limit for prompt
                 
                 with st.spinner("Extracting..."):
                     try:
@@ -202,26 +214,35 @@ with tab_ingest:
                         
                         if err:
                             st.error(err)
-                            st.stop()
-                        
-                        if 'nodes' not in data:
+                        elif 'nodes' not in data:
                              st.error("Invalid response format: 'nodes' key missing.")
-                             st.stop()
-
-                        
-                        st.write(f"Found {len(data.get('nodes', []))} nodes.")
-                        
-                        # Preview extraction
-                        df_extract = pd.DataFrame(data['nodes'])
-                        st.dataframe(df_extract)
-                        
-                        if st.button("💾 Save All to Graph"):
-                            count = 0
-                            for n in data['nodes']:
-                                if wg.add_node(n['name'], n['type'], n['description']):
-                                    count += 1
-                            st.success(f"Successfully added {count} nodes!")
+                        else:
+                            st.session_state.ingest_extracted_data = data['nodes']
                             st.rerun()
-                            
+
                     except Exception as e:
                         st.error(f"Extraction failed: {e}")
+    
+    # 3. Review & Save (Outside the Extract button block)
+    if st.session_state.ingest_extracted_data:
+        st.divider()
+        st.subheader("Review Extracted Nodes")
+        
+        df_extract = pd.DataFrame(st.session_state.ingest_extracted_data)
+        st.dataframe(df_extract)
+        
+        c_save, c_clear = st.columns(2)
+        
+        if c_save.button("💾 Save All to Graph"):
+            count = 0
+            for n in st.session_state.ingest_extracted_data:
+                # Add node returns True if success
+                if wg.add_node(n['name'], n['type'], n['description']):
+                    count += 1
+            st.success(f"Successfully added {count} nodes!")
+            st.session_state.ingest_extracted_data = None # Clear after save
+            st.rerun()
+            
+        if c_clear.button("❌ Discard"):
+            st.session_state.ingest_extracted_data = None
+            st.rerun()

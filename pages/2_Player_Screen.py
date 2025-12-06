@@ -173,7 +173,8 @@ if user_input:
             with st.chat_message("assistant"):
                 st.write(final_response)
 
+            # Success!
+            st.rerun()
+
         except Exception as e:
             st.error(f"AI Error: {e}")
-            
-    st.rerun()

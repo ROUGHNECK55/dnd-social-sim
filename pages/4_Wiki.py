@@ -45,6 +45,17 @@ with tab_social:
             "Description": "See Matrix below"
         })
     st.table(pd.DataFrame(ranges_data))
+
+    st.markdown("#### Persuasion Specifics")
+    st.write("Persuasion uses a different difficulty curve due to its powerful nature:")
+    
+    p_ranges_data = []
+    for i, (min_v, max_v) in enumerate(PERSUASION_RANGES):
+        p_ranges_data.append({
+            "Range": f"{min_v} to {max_v}",
+            "Outcome Level": f"Level {i} (0=Worst, 6=Best)"
+        })
+    st.table(pd.DataFrame(p_ranges_data))
     
     st.subheader("3. The Effects Matrix")
     st.info("This matrix dictates the *Flavor* of the response, which the AI then uses to write the dialogue.")

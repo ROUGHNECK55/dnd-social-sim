@@ -70,7 +70,29 @@ with col1:
                             st.error(f"'{char_obj.name}' is already in the roster.")
                         else:
                             st.session_state['roster'][char_obj.name] = char_obj
-                            st.success(f"Added **{char_obj.name}**!")
+                            
+                            # --- AUTO-INGESTION ---
+                            if 'world_graph' not in st.session_state:
+                                from modules.graph_engine import WorldGraph
+                                st.session_state.world_graph = WorldGraph()
+                            wg = st.session_state.world_graph
+                            
+                            # 1. Add Character Node
+                            if not wg.graph.has_node(char_obj.name):
+                                desc = f"Race: {char_obj.json_data.get('race', {}).get('fullName', 'Unknown')}\nClass: {char_obj.json_data.get('classes', [{}])[0].get('definition', {}).get('name', 'Unknown')}\n\n{char_obj.appearance}\n\nTraits: {char_obj.traits}"
+                                wg.add_node(char_obj.name, "Character", desc)
+                                st.toast(f"Created Node: {char_obj.name}")
+                                
+                            # 2. Add Background Node
+                            if char_obj.background_name and char_obj.background_name != "None":
+                                if not wg.graph.has_node(char_obj.background_name):
+                                    wg.add_node(char_obj.background_name, "Concept", char_obj.background_desc)
+                                    st.toast(f"Created Background: {char_obj.background_name}")
+                                
+                                # 3. Link Character to Background
+                                wg.add_edge(char_obj.name, char_obj.background_name, "Related_To")
+                            
+                            st.success(f"Added **{char_obj.name}** and updated World Graph!")
                             st.rerun()
                 except Exception as e:
                     st.error(f"Load Failed. Check privacy settings.\nError: {e}")

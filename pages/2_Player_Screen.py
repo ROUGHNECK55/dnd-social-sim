@@ -43,7 +43,34 @@ for msg in st.session_state.chat_history:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# --- 4. GAME LOOP ---
+# --- 4. GAME LOOP & UI ---
+col_action, col_target = st.columns([1, 2])
+
+with col_action:
+    action_type = st.radio("Action Type", ["Narrative", "Social", "Oracle"], horizontal=True)
+
+target_context = None
+
+with col_target:
+    if action_type == "Social":
+        # Filter nodes by Character or Faction
+        candidate_targets = wg.get_nodes_by_type("Character") + wg.get_nodes_by_type("Faction")
+        target_context = st.selectbox("Social Target", candidate_targets)
+    elif action_type == "Oracle":
+        # Maybe a sub-type of oracle question?
+        oracle_type = st.selectbox("Oracle Type", ["General", "Existence", "Attribute", "Plot Twist"])
+        target_context = oracle_type
+    else:
+        # Narrative - maybe select a Location?
+        locs = wg.get_nodes_by_type("Location")
+        if locs:
+            target_context = st.selectbox("Current Location (Context)", locs)
+
+# Context Helper (The requested @ tag replacement)
+st.caption("🏷️ **Context Helper**: Select entities to strictly include in the AI's awareness.")
+all_nodes = list(wg.graph.nodes())
+context_tags = st.multiselect("Active Entities", all_nodes, default=[target_context] if target_context and action_type == "Social" else None)
+
 user_input = st.chat_input("What do you do?")
 
 if user_input:
@@ -52,115 +79,84 @@ if user_input:
     with st.chat_message("user"):
         st.write(user_input)
 
-    # B. VALIDATION GATE
-    # 1. Extract potential proper nouns (Naive capitalized words)
-    # candidates = extract_proper_noun_candidates(user_input)
-    # allow_list = ["I", "The", "A", "An", "In", "On", "At", "To"] # Stopwords for capitalization
-    # filtered_candidates = {c for c in candidates if c not in allow_list}
+    # B. CONTEXT RETRIEVAL (Explicit + Inferred)
+    # Start with tags
+    known_entities = set(context_tags) 
+    # Add inferred (simple match)
+    known_in_text = find_known_entities(user_input, all_nodes)
+    known_entities.update(known_in_text)
     
-    # 2. Check against Graph
-    known_nodes = list(wg.graph.nodes())
-    known_in_text = find_known_entities(user_input, known_nodes)
-    
-    # STRICT MODE: If there's a capitalized word that isn't known, flag it?
-    # This is tricky without a good NER. 
-    # Current User Rule: "If player says something exists... check against library... if cannot find match -> ignore/prompt error."
-    # We will assume 'find_known_entities' captures the valid ones. 
-    # If the user input has NO known entities but clearly interacts with a named thing, we might catch it via LLM.
-    # For now, we trust the 'known_in_text' as the Context.
-    
-    # C. CONTEXT RETRIEVAL
-    context_data = wg.get_context(known_in_text)
+    context_data = wg.get_context(list(known_entities))
     context_str = json.dumps(context_data, indent=2)
 
-    # D. LLM: INSTRUCTION GENERATION
-    # We ask the LLM to analyze the intent and suggest mechanics.
-    prompt_planner = f"""
-    Act as a DM AI.
-    User Input: "{user_input}"
-    Active Character: {active_char}
-    World Context (Known Entities): {context_str}
-    
-    Determine the next step. Return JSON ONLY.
-    Options:
-    1. "social": The user is trying to socially interact with an NPC.
-    2. "oracle": The user is asking a question about the world or exploring unknown.
-    3. "narrative": Just a simple action/description, no dice needed.
-    4. "error": The user refers to a Proper Noun that is NOT in the Context (Hallucination check).
-    
-    JSON Format:
-    {{
-        "type": "social" | "oracle" | "narrative" | "error",
-        "reason": "explanation",
-        "target": "name of npc if social",
-        "missing_entity": "name of entity if error"
-    }}
-    """
-    
-    with st.status("Thinking...") as status:
+    with st.status("Gamemaster thinking...") as status:
         try:
             genai.configure(api_key=GOOGLE_API_KEY)
-            model = genai.GenerativeModel('gemini-2.5-flash', generation_config={"response_mime_type": "application/json"})
-            from modules.utils import parse_llm_json
-            response = model.generate_content(prompt_planner)
-            plan, err = parse_llm_json(response.text)
+            model = genai.GenerativeModel('gemini-2.5-flash', generation_config={"response_mime_type": "text/plain"}) # Text is fine for narrative
             
-            if err:
-                 status.write("Error parsing plan. Retrying...")
-                 # Optional: Retry logic here, for now just fail gracefully
-                 st.error(f"Planner Error: {err}")
-                 st.stop()
-
-            
-            status.write(f"Plan: {plan['type']}")
-            
-            # E. MECHANICS EXECUTION
             final_response = ""
-            
-            if plan['type'] == 'error':
-                 final_response = f"🚫 **Unknown Entity**: I don't know who or what '{plan.get('missing_entity')}' is. (DM Screen update required?)"
-            
-            elif plan['type'] == 'social':
-                # Simplified Social Sim hook
-                target_npc = plan.get('target')
-                if target_npc and target_npc in st.session_state['roster']:
+
+            # C. EXPLICIT ROUTING
+            if action_type == "Social":
+                status.write("Processing Social Encounter...")
+                if target_context and target_context in st.session_state['roster']:
                     speaker = st.session_state['roster'][active_char]
-                    listener = st.session_state['roster'][target_npc]
+                    listener = st.session_state['roster'][target_context]
                     
-                    # Auto-roll for now (Standard)
+                    # Mechanics
                     outcomes = calculate_social_outcomes(speaker, listener, "Normal", "Normal", {}, False)
                     
-                    # Generate Dialogue
-                    narrative_prompt = f"""
+                    # Narrative Generation
+                    prompt = f"""
                     Write a response for {listener.name} to {speaker.name}.
-                    Dialogue: "{user_input}"
-                    Social Roll Flavor: {outcomes['pers']} (Persuasion used as default for valid flow)
-                    Enforce the mechanics flavor.
+                    Context: {context_str}
+                    User Action: "{user_input}"
+                    Social Result Flavor: {outcomes['pers']} 
+                    (Use Persuasion logic as default, but adapt if input implies Intimidation/Deception)
                     """
-                    model_narrative = genai.GenerativeModel('gemini-2.5-flash')
-                    res_narrative = model_narrative.generate_content(narrative_prompt)
-                    final_response = res_narrative.text
+                    resp = model.generate_content(prompt)
+                    final_response = resp.text
+                elif target_context:
+                    # NPC in Graph but not Roster (No stats) - Pure Narrative Social
+                    prompt = f"""
+                    Roleplay as {target_context}.
+                    Context: {context_str}
+                    User Action: "{user_input}"
+                    Reflect the character's description from the context.
+                    """
+                    resp = model.generate_content(prompt)
+                    final_response = resp.text
                 else:
-                    final_response = f"⚠️ Target NPC '{target_npc}' not found in Roster (Stats needed for social sim)."
-            
-            elif plan['type'] == 'oracle':
-                # Ask Oracle logic (Placeholder for solo play tables)
-                final_response = f"🔮 **Oracle says**: Something interesting happens regarding {context_data['nodes'].keys()}. (Table lookup implementation pending)"
-                
-            else: # Narrative
-                narrative_prompt = f"""
-                Continue the story. 
-                Context: {context_str}
-                Action: {user_input}
-                """
-                model_narrative = genai.GenerativeModel('gemini-2.5-flash')
-                res = model_narrative.generate_content(narrative_prompt)
-                final_response = res.text
+                     final_response = "⚠️ No Target Selected."
 
-            # F. DISPLAY RESPONSE
+            elif action_type == "Oracle":
+                status.write("Consulting the Oracle...")
+                prompt = f"""
+                Act as a Solo RPG Oracle.
+                Type: {target_context}
+                Context: {context_str}
+                Question: "{user_input}"
+                Provide a yes/no/maybe answer or a short conceptual result based on standard solo RPG tables.
+                """
+                resp = model.generate_content(prompt)
+                final_response = f"🔮 **Oracle**: {resp.text}"
+
+            else: # Narrative
+                status.write("Weaving Story...")
+                prompt = f"""
+                Act as a Dungeon Master. Continue the story.
+                Active Character: {active_char}
+                Context: {context_str}
+                Action: "{user_input}"
+                Keep it engaging and concise.
+                """
+                resp = model.generate_content(prompt)
+                final_response = resp.text
+
+            # D. OUTPUT
             st.session_state.chat_history.append({"role": "assistant", "content": final_response})
             with st.chat_message("assistant"):
                 st.write(final_response)
-                
+
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"AI Error: {e}")

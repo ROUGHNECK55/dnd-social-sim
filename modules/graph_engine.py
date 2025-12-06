@@ -113,3 +113,7 @@ class WorldGraph:
     def get_all_edges(self):
         """Returns all edges with their data."""
         return list(self.graph.edges(data=True))
+
+    def get_nodes_by_type(self, node_type: str) -> List[str]:
+        """Returns a list of node names that match the given type."""
+        return [n for n, data in self.graph.nodes(data=True) if data.get('type') == node_type]

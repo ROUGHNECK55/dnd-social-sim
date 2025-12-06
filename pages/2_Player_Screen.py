@@ -5,6 +5,7 @@ import json
 from modules.graph_engine import WorldGraph
 from modules.nlp_utils import extract_proper_noun_candidates, find_known_entities
 from modules.mech_social import calculate_social_outcomes
+import modules.prompt_templates as prompts
 
 st.set_page_config(page_title="Solo Player", page_icon="⚔️", layout="wide")
 
@@ -56,6 +57,13 @@ with col_target:
         # Filter nodes by Character or Faction
         candidate_targets = wg.get_nodes_by_type("Character") + wg.get_nodes_by_type("Faction")
         target_context = st.selectbox("Social Target", candidate_targets)
+        
+        # DM OVERRIDE UI
+        st.divider()
+        dm_override = st.checkbox("Manual DM Override")
+        override_outcome = None
+        if dm_override:
+            override_outcome = st.selectbox("Forced Outcome", prompts.AGREEMENT_SCALE, index=3)
     elif action_type == "Oracle":
         # Maybe a sub-type of oracle question?
         oracle_type = st.selectbox("Oracle Type", ["General", "Existence", "Attribute", "Plot Twist"])
@@ -97,33 +105,59 @@ if user_input:
             final_response = ""
 
             # C. EXPLICIT ROUTING
+            debug_info = {}
+            
             if action_type == "Social":
                 status.write("Processing Social Encounter...")
                 if target_context and target_context in st.session_state['roster']:
                     speaker = st.session_state['roster'][active_char]
                     listener = st.session_state['roster'][target_context]
                     
-                    # Mechanics
-                    outcomes = calculate_social_outcomes(speaker, listener, "Normal", "Normal", {}, False)
+                    outcome_flavor = ""
+                    mechanics_data = {}
                     
-                    # Narrative Generation
-                    prompt = f"""
-                    Write a response for {listener.name} to {speaker.name}.
-                    Context: {context_str}
-                    User Action: "{user_input}"
-                    Social Result Flavor: {outcomes['pers']} 
-                    (Use Persuasion logic as default, but adapt if input implies Intimidation/Deception)
-                    """
+                    if dm_override and override_outcome:
+                        outcome_flavor = override_outcome
+                        mechanics_data = {"override": True, "result": override_outcome}
+                    else:
+                        # Mechanics
+                        outcomes = calculate_social_outcomes(speaker, listener, "Normal", "Normal", {}, False)
+                        outcome_flavor = outcomes['pers'] 
+                        mechanics_data = {
+                            "rolls": outcomes['rolls'],
+                            "scores": outcomes['scores'],
+                            "flavor": outcome_flavor
+                        }
+
+                    # Prompt Generation
+                    prompt = prompts.get_social_prompt(
+                        speaker.name, 
+                        listener.name, 
+                        context_str, 
+                        user_input, 
+                        outcome_flavor
+                    )
+                    
+                    debug_info['prompt'] = prompt
+                    debug_info.update({
+                        "type": "Social",
+                        "mechanics": mechanics_data,
+                        "table": "Effects Matrix" if not dm_override else "Manual Override"
+                    })
+                    
                     resp = model.generate_content(prompt)
                     final_response = resp.text
+
                 elif target_context:
                     # NPC in Graph but not Roster (No stats) - Pure Narrative Social
-                    prompt = f"""
-                    Roleplay as {target_context}.
-                    Context: {context_str}
-                    User Action: "{user_input}"
-                    Reflect the character's description from the context.
-                    """
+                    prompt = prompts.get_social_prompt(
+                        active_char,
+                        target_context, 
+                        context_str, 
+                        user_input, 
+                        "Neutral interaction based on context" if not dm_override else override_outcome
+                    )
+                    debug_info['prompt'] = prompt
                     resp = model.generate_content(prompt)
                     final_response = resp.text
                 else:
@@ -131,52 +165,31 @@ if user_input:
 
             elif action_type == "Oracle":
                 status.write("Consulting the Oracle...")
-                prompt = f"""
-                Act as a Solo RPG Oracle.
-                Type: {target_context}
-                Context: {context_str}
-                Question: "{user_input}"
-                Provide a yes/no/maybe answer or a short conceptual result based on standard solo RPG tables.
-                """
-                resp = model.generate_content(prompt)
-                final_response = f"🔮 **Oracle**: {resp.text}"
-
-            else: # Narrative
-                status.write("Weaving Story...")
-                prompt = f"""
-                Act as a Dungeon Master. Continue the story.
-                Active Character: {active_char}
-                Context: {context_str}
-                Action: "{user_input}"
-                Keep it engaging and concise.
-                """
-                resp = model.generate_content(prompt)
-                final_response = resp.text
-
-            # D. OUTPUT
-            debug_info = {}
-            
-            # Common debug fields
-            debug_info['prompt'] = prompt
-            
-            if action_type == "Social":
-                debug_info.update({
-                     "type": "Social",
-                     "rolls": outcomes['rolls'],
-                     "scores": outcomes['scores'],
-                     "table": "Effects Matrix"
-                })
-            elif action_type == "Oracle":
+                prompt = prompts.get_oracle_prompt(context_str, user_input, target_context)
+                
+                debug_info['prompt'] = prompt
                 debug_info.update({
                     "type": "Oracle",
                     "subtype": target_context,
                     "table": f"Oracle ({target_context})"
                 })
-            else:
-                 debug_info.update({
-                    "type": "Narrative"
-                 })
+                
+                resp = model.generate_content(prompt)
+                final_response = f"🔮 **Oracle**: {resp.text}"
 
+            else: # Narrative
+                status.write("Weaving Story...")
+                prompt = prompts.get_narrative_prompt(active_char, context_str, user_input)
+                
+                debug_info['prompt'] = prompt
+                debug_info.update({
+                    "type": "Narrative"
+                })
+                
+                resp = model.generate_content(prompt)
+                final_response = resp.text
+            
+            # D. OUTPUT
             st.session_state.chat_history.append({"role": "assistant", "content": final_response, "debug_info": debug_info})
             with st.chat_message("assistant"):
                 st.write(final_response)

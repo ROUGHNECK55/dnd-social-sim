@@ -88,6 +88,19 @@ with tab_oracle:
     4.  **Result**: Returns a "Yes/No/But/And" style answer or a "Conceptual" answer.
     
     *Current Implementation: The Oracle uses the LLM's latent knowledge combined with standard Solo RPG probability prompts.*
+    
+    ### The Agreement Scale
+    For both Oracle answers and Social outcomes, the Engine uses a 7-point scale:
+    
+    | Level | Meaning |
+    | :--- | :--- |
+    | **Agrees Whole Heartedly** | Equivalent to "Yes, and..." or CRIT SUCCESS |
+    | **Agree** | "Yes" or Strong Success |
+    | **Somewhat Agree** | "Yes, but..." or Marginal Success |
+    | **Neither Agree or Disagree** | "Maybe" or Neutral/Stalemate |
+    | **Somewhat Disagree** | "No, but..." or Marginal Failure |
+    | **Disagree** | "No" or Strong Failure |
+    | **Whole Heartedly Disagree** | "No, and..." or CRIT FAIL |
     """)
 
 # ==========================

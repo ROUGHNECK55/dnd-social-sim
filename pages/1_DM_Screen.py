@@ -1,0 +1,184 @@
+import streamlit as st
+import pandas as pd
+from modules.graph_engine import WorldGraph
+
+st.set_page_config(page_title="DM Screen", page_icon="🗝️", layout="wide")
+
+st.title("🗝️ DM Screen: World Builder")
+
+# Initialize Graph Engine
+if 'world_graph' not in st.session_state:
+    st.session_state.world_graph = WorldGraph()
+
+wg = st.session_state.world_graph
+
+# Tabs for different DM functions
+tab_ontology, tab_nodes, tab_ingest = st.tabs(["📜 Ontology", "📦 Nodes & Relations", "📥 Ingestion"])
+
+# ==========================
+# ONTOLOGY TAB
+# ==========================
+with tab_ontology:
+    st.header("Ontology Management")
+    st.info("Define the allowed types for Nodes and Edges in your world.")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Node Types")
+        current_node_types = wg.ontology["node_types"]
+        # Simple text area for editing list (newline separated)
+        new_node_types_str = st.text_area(
+            "Allowed Node Types (one per line)", 
+            value="\n".join(current_node_types),
+            height=200
+        )
+        if st.button("Update Node Types"):
+            node_types = [t.strip() for t in new_node_types_str.split("\n") if t.strip()]
+            wg.update_ontology(node_types=node_types)
+            st.success("Node types updated!")
+            
+    with col2:
+        st.subheader("Edge Types")
+        current_edge_types = wg.ontology["edge_types"]
+        new_edge_types_str = st.text_area(
+            "Allowed Edge Types (one per line)", 
+            value="\n".join(current_edge_types),
+            height=200
+        )
+        if st.button("Update Edge Types"):
+            edge_types = [t.strip() for t in new_edge_types_str.split("\n") if t.strip()]
+            wg.update_ontology(edge_types=edge_types)
+            st.success("Edge types updated!")
+
+# ==========================
+# NODES TAB
+# ==========================
+with tab_nodes:
+    st.header("Node Manager")
+    
+    # 1. CREATE NODE
+    with st.expander("➕ Create New Node", expanded=False):
+        c1, c2 = st.columns(2)
+        node_name = c1.text_input("Node Name (Unique ID)")
+        node_type = c2.selectbox("Node Type", wg.ontology["node_types"])
+        node_desc = st.text_area("Description")
+        
+        if st.button("Create Node"):
+            if node_name:
+                if wg.add_node(node_name, node_type, node_desc):
+                    st.success(f"Created node: {node_name}")
+                else:
+                    st.error("Failed to create node. Check logs or uniqueness.")
+            else:
+                st.warning("Name is required.")
+
+    st.divider()
+
+    # 2. LIST / EDIT NODES
+    st.subheader("Existing Nodes")
+    nodes = wg.get_all_nodes()
+    
+    if nodes:
+        # Convert to DataFrame for easier viewing
+        df_nodes = pd.DataFrame.from_dict(nodes, orient='index')
+        st.dataframe(df_nodes, use_container_width=True)
+        
+        # Edit Selection
+        selected_node = st.selectbox("Select Node to Edit/Delete", options=list(nodes.keys()))
+        
+        if selected_node:
+            n_data = nodes[selected_node]
+            st.write(f"**Editing: {selected_node}**")
+            
+            e_type = st.selectbox("Type", wg.ontology["node_types"], index=wg.ontology["node_types"].index(n_data['type']) if n_data['type'] in wg.ontology["node_types"] else 0)
+            e_desc = st.text_area("Description", value=n_data.get('description', ''))
+            
+            c_edit, c_del = st.columns(2)
+            if c_edit.button("Update Node"):
+                wg.add_node(selected_node, e_type, e_desc)
+                st.success("Updated!")
+                st.rerun()
+                
+            if c_del.button("🗑️ Delete Node", type="primary"):
+                wg.delete_node(selected_node)
+                st.warning(f"Deleted {selected_node}")
+                st.rerun()
+                
+    else:
+        st.info("No nodes in the graph yet.")
+
+# ==========================
+# INGESTION TAB
+# ==========================
+with tab_ingest:
+    st.header("📥 Ingestion Engine")
+    st.info("Paste text or load converted resources to auto-generate Nodes.")
+
+    # 1. Source Selection
+    ingest_source = st.radio("Source", ["Paste Text", "Load Resource File"])
+    
+    source_text = ""
+    if ingest_source == "Paste Text":
+        source_text = st.text_area("Content to Ingest", height=300)
+    else:
+        # List MD files
+        import os
+        resource_dir = os.path.join("resources", "solo_play")
+        if os.path.exists(resource_dir):
+            files = [f for f in os.listdir(resource_dir) if f.endswith(".md")]
+            selected_file = st.selectbox("Select File", files)
+            if selected_file:
+                with open(os.path.join(resource_dir, selected_file), 'r', encoding='utf-8') as f:
+                    # Limit preview to avoid overload
+                    full_text = f.read()
+                    st.text_area("File Preview (First 1000 chars)", full_text[:1000], disabled=True)
+                    if st.button("Load File Content"):
+                        source_text = full_text # In practice you might want to chunk this
+        else:
+            st.error("Resource directory not found.")
+
+    # 2. Extract Button
+    if st.button("🔮 AI Extract Nodes", type="primary", disabled=not source_text):
+        if len(source_text) > 50000:
+             st.warning("Text too long! Please process in chunks (< 50k characters).")
+        else:
+            import google.generativeai as genai
+            import json
+            
+            if "GEMINI_API_KEY" in st.secrets:
+                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                model = genai.GenerativeModel('gemini-2.5-flash', generation_config={"response_mime_type": "application/json"})
+                
+                prompt_extract = f"""
+                Extract entities from the text as Nodes for a Graph Database.
+                Ontology (Allowed Types): {wg.ontology['node_types']}
+                
+                Return JSON dict with key "nodes": [ {{ "name": "...", "type": "...", "description": "..." }} ]
+                
+                Text:
+                {source_text[:30000]} 
+                """
+                # Truncate to safety limit for prompt
+                
+                with st.spinner("Extracting..."):
+                    try:
+                        resp = model.generate_content(prompt_extract)
+                        data = json.loads(resp.text)
+                        
+                        st.write(f"Found {len(data.get('nodes', []))} nodes.")
+                        
+                        # Preview extraction
+                        df_extract = pd.DataFrame(data['nodes'])
+                        st.dataframe(df_extract)
+                        
+                        if st.button("💾 Save All to Graph"):
+                            count = 0
+                            for n in data['nodes']:
+                                if wg.add_node(n['name'], n['type'], n['description']):
+                                    count += 1
+                            st.success(f"Successfully added {count} nodes!")
+                            st.rerun()
+                            
+                    except Exception as e:
+                        st.error(f"Extraction failed: {e}")

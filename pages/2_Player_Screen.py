@@ -75,7 +75,7 @@ user_input = st.chat_input("What do you do?")
 
 if user_input:
     # A. DISPLAY USER INPUT
-    st.session_state.chat_history.append({"role": "user", "content": user_input})
+    st.session_state.chat_history.append({"role": "user", "content": user_input, "debug_info": None})
     with st.chat_message("user"):
         st.write(user_input)
 
@@ -154,9 +154,26 @@ if user_input:
                 final_response = resp.text
 
             # D. OUTPUT
-            st.session_state.chat_history.append({"role": "assistant", "content": final_response})
+            debug_info = None
+            if action_type == "Social":
+                debug_info = {
+                     "type": "Social",
+                     "rolls": outcomes['rolls'],
+                     "scores": outcomes['scores'],
+                     "table": "Effects Matrix"
+                }
+            elif action_type == "Oracle":
+                debug_info = {
+                    "type": "Oracle",
+                    "subtype": target_context,
+                    "table": f"Oracle ({target_context})"
+                }
+
+            st.session_state.chat_history.append({"role": "assistant", "content": final_response, "debug_info": debug_info})
             with st.chat_message("assistant"):
                 st.write(final_response)
 
         except Exception as e:
             st.error(f"AI Error: {e}")
+            
+    st.rerun()

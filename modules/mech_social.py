@@ -76,6 +76,7 @@ def calculate_social_outcomes(speaker, listener, s_state, l_state, min_flags, l_
             'perf': score_perf,
             'dec': score_dec,
             'pers': score_pers
-        }
+        },
+        'rolls': rolls
     }
     return outcomes

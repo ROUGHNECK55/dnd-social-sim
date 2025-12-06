@@ -79,15 +79,55 @@ with tab_social:
 with tab_oracle:
     st.header("The Oracle")
     st.markdown("""
-    The Oracle is used for **Solo Play** when you need to answer a question about the world that isn't defined in the Graph.
+    The Oracle acts as a **Virtual Game Master**, simulating a probability check to answer user questions ("Is the door locked?", "Does the guard see me?").
     
-    **Logic Flow:**
-    1.  **Context Check**: AI looks at the Graph context.
-    2.  **Probability**: AI estimates the likelihood based on the context.
-    3.  **Roll**: AI simulates a roll (conceptually) or uses a Logic Table.
-    4.  **Result**: Returns a "Yes/No/But/And" style answer or a "Conceptual" answer.
+    ### 1. The Decision Tree (Process)
+    When you ask an Oracle Question, the system follows this logic:
     
-    *Current Implementation: The Oracle uses the LLM's latent knowledge combined with standard Solo RPG probability prompts.*
+    1.  **Context Analysis**: The AI reads the *Current Context* (Active Entities + Neighbors) and the *Question*.
+    2.  **Likelihood Assessment**: The AI determines a "Likelihood Modifier" based on the logic of the scene.
+        *   *Example: Asking "Is there dragon in this random tavern?" vs "Is there ale in this tavern?"*
+    3.  **Virtual Roll**: The AI simulates a **d100** roll (conceptually) against this likelihood.
+    4.  **Threshold Mapping**: The result is mapped to the **7-Point Agreement Scale**.
+    
+    ### 2. The Game Math (Simulated)
+    While the AI uses latent probability, it simulates the following standard Tabletop math structure:
+    
+    **Base Logic**: 50/50 Chance (DC 50)
+    **Modifiers**:
+    *   **Impossible**: -40 to Roll (Requires near-perfect luck)
+    *   **Unlikely**: -20 to Roll
+    *   **Likely**: +20 to Roll
+    *   **Certain**: +40 to Roll
+    
+    **The Output Mapping (7-Point Scale):**
+    | Simulated d100 Result | Agreement Scale Outcome | Traditional Oracle |
+    | :--- | :--- | :--- |
+    | **91+** | **Agrees Whole Heartedly** | "Yes, and..." (Critical Success) |
+    | **71 - 90** | **Agree** | "Yes" |
+    | **51 - 70** | **Somewhat Agree** | "Yes, but..." (Success at a cost) |
+    | **41 - 50** | **Neither Agree or Disagree** | "Maybe" / "Unclear" |
+    | **21 - 40** | **Somewhat Disagree** | "No, but..." (Fail forward) |
+    | **11 - 20** | **Disagree** | "No" |
+    | **10 or less** | **Whole Heartedly Disagree** | "No, and..." (Critical Fail) |
+
+    ### 3. Examples
+    
+    **Example A: The Guard**
+    *   **Context**: Player is sneaking. Guard is "Lazy" and "Tired".
+    *   **Question**: "Does the guard notice me?"
+    *   **Assessment**: Guard is distracted. Likelihood of noticing is *Unlikely (-20)*.
+    *   **Simulated Roll**: AI rolls a 60. -20 Modifier = **40**.
+    *   **Result**: 40 maps to **Somewhat Disagree** ("No, but...").
+    *   **Output**: *"No, he doesn't see you, BUT he hears a noise and starts walking toward your hiding spot."*
+
+    **Example B: The Locked Door**
+    *   **Context**: A high-security vault.
+    *   **Question**: "Is the door unlocked?"
+    *   **Assessment**: It's a vault. Likelihood is *Impossible (-40)*.
+    *   **Simulated Roll**: AI rolls a 95 (Amazing luck). -40 Modifier = **55**.
+    *   **Result**: 55 maps to **Somewhat Agree** ("Yes, but...").
+    *   **Output**: *"Yes, it's unlocked, BUT the alarm system is clearly active and will trigger if you open it."*
     
     ### The Agreement Scale
     For both Oracle answers and Social outcomes, the Engine uses a 7-point scale:

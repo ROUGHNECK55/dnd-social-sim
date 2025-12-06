@@ -28,10 +28,11 @@ It includes relevant Characters, Locations, and their relationships.
 {context_str}
 """
 
-def get_social_prompt(speaker_name, listener_name, context_str, user_action, outcome_str):
+def get_social_prompt(speaker_name, listener_name, context_str, user_action, mechanics_flavors, agreement_outcome):
     """
     Generates a prompt for a Social Interaction.
-    outcome_str: The determined result (e.g., "Agrees Whole Heartedly" or specific mechanic flavor).
+    mechanics_flavors: dict with keys 'int', 'perf', 'dec', 'pers' containing the flavor text.
+    agreement_outcome: The required agreement level (e.g., "Agrees Whole Heartedly").
     """
     return f"""### IDENTITY
 You are a Dungeon Master and an expert creative writer for a Tabletop RPG.
@@ -43,11 +44,21 @@ You are roleplaying as the NPC: **{listener_name}**.
 Write a dialogue response for **{listener_name}** speaking to **{speaker_name}**.
 The user (playing {speaker_name}) has just said/done: "{user_action}"
 
+### SOCIAL MECHANICS ANALYSIS
+The system has analyzed the character's reception to different rhetorical approaches (Logos/Ethos). 
+Use these as the *internal emotional color* of the response:
+- **Intimidation**: {mechanics_flavors.get('int', 'N/A')}
+- **Performance**: {mechanics_flavors.get('perf', 'N/A')}
+- **Deception**: {mechanics_flavors.get('dec', 'N/A')}
+- **Persuasion**: {mechanics_flavors.get('pers', 'N/A')}
+
 ### CONSTRAINTS
-1.  **Mandatory Outcome**: The reaction MUST align with this specific Result: **"{outcome_str}"**.
-2.  **Tone**: Match the character's personality defined in the Context.
-3.  **Brevity**: Keep the response concise (2-4 sentences) unless a monologue is appropriate.
-4.  **No Markdown**: Do not use bold/italic formatting for speech. Use standard novel style.
+1.  **Mandatory Outcome**: Regardless of the specific flavors above, the final result MUST align with this specific Agreement Level: **"{agreement_outcome}"**.
+2.  **Synthesis**: Combine the "Social Mechanics Analysis" (how they feel about the *method*) with the "Mandatory Outcome" (their final decision).
+    *   Example: They might feel insulted (Intimidation: Hostile) yet still agree because they are cowed (Agreement: Agree).
+3.  **Tone**: Match the character's personality defined in the Context.
+4.  **Brevity**: Keep the response concise (2-4 sentences) unless a monologue is appropriate.
+5.  **No Markdown**: Do not use bold/italic formatting for speech. Use standard novel style.
 
 ### OUTPUT FORMAT
 Return ONLY the dialogue/narrative text. No meta-commentary.

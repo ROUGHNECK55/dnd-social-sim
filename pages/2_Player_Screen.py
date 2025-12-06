@@ -113,36 +113,52 @@ if user_input:
                     speaker = st.session_state['roster'][active_char]
                     listener = st.session_state['roster'][target_context]
                     
-                    outcome_flavor = ""
-                    mechanics_data = {}
+                    # A. Always Run Mechanics (Flavor)
+                    outcomes = calculate_social_outcomes(speaker, listener, "Normal", "Normal", {}, False)
                     
-                    if dm_override and override_outcome:
-                        outcome_flavor = override_outcome
-                        mechanics_data = {"override": True, "result": override_outcome}
-                    else:
-                        # Mechanics
-                        outcomes = calculate_social_outcomes(speaker, listener, "Normal", "Normal", {}, False)
-                        outcome_flavor = outcomes['pers'] 
-                        mechanics_data = {
-                            "rolls": outcomes['rolls'],
-                            "scores": outcomes['scores'],
-                            "flavor": outcome_flavor
-                        }
+                    mechanics_flavors = {
+                        'int': outcomes['int'],
+                        'perf': outcomes['perf'],
+                        'dec': outcomes['dec'],
+                        'pers': outcomes['pers']
+                    }
+                    
+                    # B. Determine Outcome (Agreement Level)
+                    agreement_outcome = ""
+                    override_active = False
 
-                    # Prompt Generation
+                    if dm_override and override_outcome:
+                         agreement_outcome = override_outcome
+                         override_active = True
+                    else:
+                        # Auto-determine agreement based on best performance
+                        # We use the max level achieved across all skills to pick from the Scale
+                        levels = outcomes['levels'].values()
+                        best_level = max(levels) # 0-6
+                        agreement_outcome = prompts.AGREEMENT_SCALE[best_level]
+                    
+                    mechanics_data = {
+                        "rolls": outcomes['rolls'],
+                        "scores": outcomes['scores'],
+                        "levels": outcomes['levels'],
+                        "agreement": agreement_outcome
+                    }
+
+                    # C. Generate Prompt
                     prompt = prompts.get_social_prompt(
                         speaker.name, 
                         listener.name, 
                         context_str, 
                         user_input, 
-                        outcome_flavor
+                        mechanics_flavors,
+                        agreement_outcome
                     )
                     
                     debug_info['prompt'] = prompt
                     debug_info.update({
                         "type": "Social",
                         "mechanics": mechanics_data,
-                        "table": "Effects Matrix" if not dm_override else "Manual Override"
+                        "table": "Effects Matrix + Oracle Scale" if not override_active else "Manual Override"
                     })
                     
                     resp = model.generate_content(prompt)

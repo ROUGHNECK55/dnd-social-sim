@@ -37,7 +37,7 @@ def get_standard_text(score, skill_type, s_name, l_name):
         if min_val <= score <= max_val:
             index = i
             break
-    return EFFECTS_MATRIX[index][skill_type].format(s=s_name, l=l_name)
+    return EFFECTS_MATRIX[index][skill_type].format(s=s_name, l=l_name), index
 
 def get_persuasion_text(score, s_name, l_name):
     index = 3 
@@ -45,7 +45,7 @@ def get_persuasion_text(score, s_name, l_name):
         if min_val <= score <= max_val:
             index = i
             break
-    return EFFECTS_MATRIX[index]["persuasion"].format(s=s_name, l=l_name)
+    return EFFECTS_MATRIX[index]["persuasion"].format(s=s_name, l=l_name), index
 
 def calculate_social_outcomes(speaker, listener, s_state, l_state, min_flags, l_min_insight=False):
     """
@@ -67,16 +67,28 @@ def calculate_social_outcomes(speaker, listener, s_state, l_state, min_flags, l_
     score_pers = (speaker.skills['Persuasion'].total + rolls['pers']) + l_insight_total 
     
     outcomes = {
-        'int': get_standard_text(score_int, 'intimidation', speaker.name, listener.name),
-        'perf': get_standard_text(score_perf, 'performance', speaker.name, listener.name),
-        'dec': get_standard_text(score_dec, 'deception', speaker.name, listener.name),
-        'pers': get_persuasion_text(score_pers, speaker.name, listener.name),
+    txt_int, lvl_int = get_standard_text(score_int, 'intimidation', speaker.name, listener.name)
+    txt_perf, lvl_perf = get_standard_text(score_perf, 'performance', speaker.name, listener.name)
+    txt_dec, lvl_dec = get_standard_text(score_dec, 'deception', speaker.name, listener.name)
+    txt_pers, lvl_pers = get_persuasion_text(score_pers, speaker.name, listener.name)
+
+    outcomes = {
+        'int': txt_int,
+        'perf': txt_perf,
+        'dec': txt_dec,
+        'pers': txt_pers,
         'scores': {
             'int': score_int,
             'perf': score_perf,
             'dec': score_dec,
             'pers': score_pers
         },
+        'levels': {
+             'int': lvl_int,
+             'perf': lvl_perf,
+             'dec': lvl_dec,
+             'pers': lvl_pers
+         },
         'rolls': rolls
     }
     return outcomes

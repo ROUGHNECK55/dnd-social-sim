@@ -66,7 +66,6 @@ def calculate_social_outcomes(speaker, listener, s_state, l_state, min_flags, l_
     score_dec = (speaker.skills['Deception'].total + rolls['dec']) - l_insight_total
     score_pers = (speaker.skills['Persuasion'].total + rolls['pers']) + l_insight_total 
     
-    outcomes = {
     txt_int, lvl_int = get_standard_text(score_int, 'intimidation', speaker.name, listener.name)
     txt_perf, lvl_perf = get_standard_text(score_perf, 'performance', speaker.name, listener.name)
     txt_dec, lvl_dec = get_standard_text(score_dec, 'deception', speaker.name, listener.name)
